@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificato di Destinazione Urbanistica</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .form-section {
+            border-bottom: 1px solid #000;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-title {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-subtitle {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .spacer {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container mt-5">
+        <h2 class="form-title">ISTANZA TELEMATICO DI RILASCIO<br>CERTIFICATO DI DESTINAZIONE URBANISTICA</h2>
+        <p class="text-center"><small>(art. 30, comma 3 del D.P.R. n. 380/2001 s.m.i.)</small></p>
+
+        <!-- Richiedente Section -->
+        <form>
+            <div class="form-section">
+                <h5 class="form-subtitle">RICHIEDENTE</h5>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="richiedenteNome" class="form-label">Nome</label>
+                        <input type="text" class="form-control" id="richiedenteNome" placeholder="Inserisci nome">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="richiedenteCognome" class="form-label">Cognome</label>
+                        <input type="text" class="form-control" id="richiedenteCognome" placeholder="Inserisci cognome">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="richiedenteCF" class="form-label">C.F. (Codice Fiscale)</label>
+                        <input type="text" class="form-control" id="richiedenteCF" placeholder="Inserisci codice fiscale">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="richiedenteVia" class="form-label">Via</label>
+                        <input type="text" class="form-control" id="richiedenteVia" placeholder="Inserisci via">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="richiedenteNumero" class="form-label">N.</label>
+                        <input type="text" class="form-control" id="richiedenteNumero" placeholder="Numero civico">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="richiedenteCitta" class="form-label">Città</label>
+                        <input type="text" class="form-control" id="richiedenteCitta" placeholder="Inserisci città">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="richiedenteProvincia" class="form-label">Prov</label>
+                        <input type="text" class="form-control" id="richiedenteProvincia" placeholder="Prov.">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="richiedenteEmail" class="form-label">Mail</label>
+                        <input type="email" class="form-control" id="richiedenteEmail" placeholder="Inserisci email">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="richiedentePEC" class="form-label">PEC</label>
+                        <input type="text" class="form-control" id="richiedentePEC" placeholder="Inserisci PEC">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delegato Section -->
+            <div class="form-section">
+                <h5 class="form-subtitle">DELEGATO (se esistente)</h5>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="delegatoNome" class="form-label">Nome</label>
+                        <input type="text" class="form-control" id="delegatoNome" placeholder="Inserisci nome delegato">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="delegatoCognome" class="form-label">Cognome</label>
+                        <input type="text" class="form-control" id="delegatoCognome" placeholder="Inserisci cognome delegato">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="delegatoCF" class="form-label">C.F. (Codice Fiscale)</label>
+                        <input type="text" class="form-control" id="delegatoCF" placeholder="Inserisci codice fiscale">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="delegatoVia" class="form-label">Via</label>
+                        <input type="text" class="form-control" id="delegatoVia" placeholder="Inserisci via">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="delegatoNumero" class="form-label">N.</label>
+                        <input type="text" class="form-control" id="delegatoNumero" placeholder="Numero civico">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="delegatoCitta" class="form-label">Città</label>
+                        <input type="text" class="form-control" id="delegatoCitta" placeholder="Inserisci città">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="delegatoProvincia" class="form-label">Prov</label>
+                        <input type="text" class="form-control" id="delegatoProvincia" placeholder="Prov.">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="delegatoEmail" class="form-label">Mail</label>
+                        <input type="email" class="form-control" id="delegatoEmail" placeholder="Inserisci email">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="delegatoPEC" class="form-label">PEC</label>
+                        <input type="text" class="form-control" id="delegatoPEC" placeholder="Inserisci PEC">
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="form-section">
+                <h5 class="form-subtitle">DELEGATO (se esistente)</h5>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="foglio" class="form-label">Foglio</label>
+                        <input type="number" class="form-control" id="foglio" placeholder="Inserisci foglio" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="particella" class="form-label">Particella</label>
+                        <input type="number" class="form-control" id="particella" placeholder="Inserisci particella" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="particella" class="form-label">Aggiungi alla richiesta</label><br>
+                        <button type="button" class="btn btn-primary btn-inserisci" id="inserisciBtn">Inserisci</button>
+                    </div>
+
+                </div>
+
+                <input type="hidden" id="datiCatastali" name="datiCatastali" value="">
+
+                <div class="table-responsive mt-5">
+                    <table class="table table-bordered" id="catastaliTable">
+                        <thead>
+                            <tr>
+                                <th>Foglio</th>
+                                <th>Particella</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dati dinamici -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <button type="submit" class="btn btn-success">Genera Istanza</button>
+            </div>
+        </form>
+
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            let catastali = []; // Array to hold Foglio and Particella pairs
+
+            // Event listener for the "Inserisci" button
+            $('#inserisciBtn').click(function() {
+                let foglio = $('#foglio').val();
+                let particella = $('#particella').val();
+
+                if (foglio && particella) {
+                    // Aggiungi la coppia all'array catastali
+                    catastali.push({
+                        foglio: foglio,
+                        particella: particella
+                    });
+
+                    // Aggiungi una nuova riga alla tabella
+                    $('#catastaliTable tbody').append(`
+                    <tr>
+                        <td>${foglio}</td>
+                        <td>${particella}</td>
+                    </tr>
+                `);
+
+                    // Pulisci i campi
+                    $('#foglio').val('');
+                    $('#particella').val('');
+
+                    $('#datiCatastali').val(JSON.stringify(catastali));
+                }
+            });
+
+        });
+    </script>
+</body>
+
+</html>

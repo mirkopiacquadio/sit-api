@@ -1,0 +1,76 @@
+# Laravel & PHP related
+/vendor/
+/node_modules/
+
+# Laravel 5 & 6
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/storage/*.key
+/storage/*.log
+/storage/*.txt
+/storage/*.json
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/logs/*
+/storage/oauth-private.key
+/storage/oauth-public.key
+!/storage/app/
+!/storage/app/quotations/
+/storage/framework/laravel-excel/*
+!/storage/framework/laravel-excel/.gitignore
+
+# Laravel 4 specific
+bootstrap/compiled.php
+app/storage/
+
+# Laravel 7, 8 & 9 specific
+/public/theme
+/public/hot
+/public/storage
+/public/mix-manifest.json
+/public/*.key
+/public/*.pem
+!public/index.php
+!public/js/
+!public/js/**
+!public/assets/
+!public/assets/**
+
+# Vagrant
+Homestead.yaml
+Homestead.json
+
+# NPM
+npm-debug.log
+yarn-error.log
+
+# Composer
+composer.lock
+
+# Laravel Mix
+/public/css/app.css
+/public/js/app.js
+
+# Environment variables
+
+.env.backup
+.env.local
+.env.development
+.env.production
+.env.testing
+
+# IDEs and editors
+/.idea
+/.vscode
+*.swp
+*~
+
+# MacOS specific
+.DS_Store
+
+# Windows specific
+Thumbs.db
