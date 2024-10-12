@@ -60,6 +60,8 @@ class AppHelper
         $content = file_get_contents(storage_path("app/$codCom/Modelli/cdu.html"));
         $pathFotoComune = asset("storage/$codCom/comune.png");
         $content = str_replace('{path_foto_comune}', $pathFotoComune, $content);
+        $content = str_replace('{titolo}', $dati['cdutitolo'], $content);
+        $content = str_replace('{qualita}', $dati['cduqualita'], $content);
         $content = str_replace('{protocollo}', $dati['cduprot'], $content);
         $content = str_replace('{cognome}', $dati['cducgn'], $content);
         $content = str_replace('{nome}', $dati['cdunm'], $content);

@@ -178,23 +178,12 @@ class CDUController extends Controller
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->input('cdusetdecimals') == '1' ? 0 : ($request->input('cdusetdecimals') == '2' ? 1 : 2);
+        $decimali = $request->cdusetdecimals;
         $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
-
+        
         $piani = $request->piano;
-
-        /*$keys = array_keys($post);
-        $count = count($post);
-        for ($i = 0; $i < $count; $i++) {
-            if (strpos($keys[$i], 'cdup-') !== false) {
-                $s = substr($keys[$i], 5);
-                array_push($piani, $s);
-            }
-        }*/
-
         $elUiu = json_decode($post['uiu']);
 
-        //print_r(array_values($elUiu));
         $c = count($elUiu);
         $c1 = count($piani);
 
@@ -313,7 +302,7 @@ class CDUController extends Controller
                 // Se la creazione del file HTML temporaneo ha fallito, ritorna un messaggio di errore
                 return response()->json(['error' => 'Failed to create temporary HTML file'], 500);
             }
-        }
+        } else echo 'Non disponibile';
     }
 
     public function generaCDUHtml(Request $request)
@@ -569,7 +558,7 @@ class CDUController extends Controller
         } else return null;
     }
 
-    private static function calcolaValoreCdu(&$aisect, &$mq, &$auiu, &$perc, &$cifreDecimali, &$approssimazione, &$visPerc, &$visMq)
+    private static function calcolaValoreCdu(&$aisect, &$mq, &$auiu, &$perc, $cifreDecimali, &$approssimazione, &$visPerc, &$visMq)
     {
         global $mqMinimo;
         $prop = round((($aisect * $mq) / $auiu), $cifreDecimali);
