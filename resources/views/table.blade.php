@@ -12,8 +12,14 @@
                 @isset($data_uiu)
                     @foreach ($data_uiu['intersects'] as $key => $dati)
                         @foreach ($dati as $data)
+                            @php
+                                $nomeNorma = isset($nmPiani[$key]) ? $nmPiani[$key] : $key;
+                                if (str_contains($nomeNorma, 'urbutm')) {
+                                    $nomeNorma = str_replace('urbutm', '', $key);
+                                }
+                            @endphp
                             <tr>
-                                <td class="align-middle" style="word-wrap: break-word; word-break: break-all; max-width: 200px;"><b>{{ strtoupper(str_replace('urbutm', '', $key)) }}<b></td>
+                                <td class="align-middle" style="word-wrap: break-word; word-break: break-all; max-width: 200px;"><b>{{ strtoupper($nomeNorma) }}<b></td>
                                 <td class="align-middle" style="word-wrap: break-word; word-break: break-all; max-width: 200px;">{{ $data['STRING'] }}</td>
                                 <td class="align-middle" style="word-wrap: break-word; word-break: break-all;">{{ $data['cal'] }}</td>
                             </tr>

@@ -53,13 +53,11 @@ class AppHelper
         }
     }
 
-    public static function formattaCdu($dati, $uiu, $elencoNorme, $codCom)
+    public static function formattaCdu($dati, $uiu, $elencoNorme, $codCom, $nomiPiani)
     {
         $uiu = (array)$uiu;
         $indirizzo = $dati['cducitta'].' - '.$dati['cducap'];
         $content = file_get_contents(storage_path("app/$codCom/Modelli/cdu.html"));
-        $pathFotoComune = asset("storage/$codCom/comune.png");
-        $content = str_replace('{path_foto_comune}', $pathFotoComune, $content);
         $content = str_replace('{titolo}', $dati['cdutitolo'], $content);
         $content = str_replace('{qualita}', $dati['cduqualita'], $content);
         $content = str_replace('{protocollo}', $dati['cduprot'], $content);
@@ -104,44 +102,15 @@ class AppHelper
                 while (current($uiu[$i]['intersects'])) {
                     $key = key($uiu[$i]['intersects']);
 
+                  
                     /**
                      * Prova per il cambio dei nomi del piano, eliminare dopo l'inserimento del Model per la creazione
-                     * del nome personalizzato, tale creazione prevede assegnazione del nome della tabell e nome User Friendly
+                     * del nome personalizzato, tale creazione prevede assegnazione dekeyNormal nome della tabell e nome User Friendly
                      * es. psaiurbutm -> PSAI associazione 1-1,
                      * I piani all'interno del JS del CDU (le radio button devono essere chiamate dal BE)
                      */
-                    switch ($key) {
-                        case 'ppurbutm':
-                            $nome = 'PIANO PARCO';
-                            break;
-                        case 'sicboscourbutm':
-                            $nome = 'SIC-BOSCO';
-                            break;
-                        case 'sicfiumeurbutm':
-                            $nome = 'SIC-FIUME';
-                            break;
-                        case 'usciciviciurbutm':
-                            $nome = 'USI CIVICI';
-                            break;
-                        case 'pianorecuperourbutm':
-                            $nome = 'PIANO DI RECUPERO';
-                            break;
-                        case 'pianoespansioneurbutm':
-                            $nome = 'PIANO DI ESPANSIONE';
-                            break;
-                        case 'vincoliopelegisurbutm':
-                            $nome = 'VINCOLI OPE LEGIS';
-                            break;
-                        case 'viurbutm':
-                            $nome = 'VINCOLO IDROGEOLOGICO';
-                            break;
-                        default:
-                            $nome = $key;
-                            break;
-                    }
-
-                    $nome = str_replace('urbutm', '', $key);
-
+                    $nome = isset($nomiPiani[$key]) ? $nomiPiani[$key] : $key;
+                    if(str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
                     $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b></li><ul>';
 
                     $c2 = count($uiu[$i]['intersects'][$key]);
@@ -153,6 +122,7 @@ class AppHelper
                     $elencoIntersezioni .= '</ul>';
                     next($uiu[$i]['intersects']);
                 }
+                
                 $elencoIntersezioni .= '</ul></ol>';
                 $creaDocumento = true;
             }
@@ -166,9 +136,10 @@ class AppHelper
             $strNorme = '';            
             while ($elNorma = current($elencoNorme)) {
                 $keyNorma = key($elencoNorme);
-
+                $nomeNorma = isset($nomiPiani[$keyNorma]) ? $nomiPiani[$keyNorma] : $keyNorma;
+                if(str_contains($nomeNorma, 'urbutm')) $nomeNorma = str_replace('urbutm', '', $keyNorma);
                 //echo "kn=$keyNorma";
-                $strNorme .= '<P><b>' . strtoupper(str_replace('urbutm', '', $keyNorma)) . '</b></P><UL>';
+                $strNorme .= '<P><b>' . strtoupper($nomeNorma) . '</b></P><UL>';
                 //echo 'NN = '.$elNorma;
                 $c3 = count($elNorma);
                 //  echo 'C: '. $c3.' |   ';

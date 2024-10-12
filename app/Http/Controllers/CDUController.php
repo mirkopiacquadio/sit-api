@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\File;
 
 class CDUController extends Controller
 {
-    private $dbConnection;
     private $elencoFg = array();
     private $nomiDb = array(
         "9999" => 'morcone-webgis', //prova, per la versione development...
@@ -38,8 +37,63 @@ class CDUController extends Controller
         "H087" => 'puglianello-webgis'
     );
 
+    private $nomiPiani = [];
+    private $infoComune = [];
     //costruttore privato per il singleton
     private function setDB($code_comune)
+    {
+        $code_comune = strtoupper($code_comune);
+        // Prima stabilisci la connessione al database info-generali
+        DB::purge('info-generali'); // Pulisce la connessione precedente
+        config(['database.connections.info-generali.database' => 'info-generali']);
+        DB::reconnect('info-generali'); // Riconnette con il database info-generali
+
+        // Eseguire la query per ottenere i dati dalla tabella nome_piani
+        $q = "SELECT codice, descrizione FROM nome_piani;";
+        $res = DB::connection('info-generali')->select($q); // Usa la connessione al database info-generali
+
+        // Inizializzare l'array $nomiPiani con i risultati della query
+        $this->nomiPiani = [];
+        foreach ($res as $row) {
+            $this->nomiPiani[$row->codice] = $row->descrizione; // Aggiungi la descrizione con il codice come chiave
+        }
+
+        // Eseguire la query per ottenere i dati dalla tabella ana_comuni
+        $q = "SELECT * FROM ana_comuni where codice = '$code_comune';";
+        $res = DB::connection('info-generali')->select($q); // Usa la connessione al database info-generali
+
+        // Inizializzare l'array $nomiPiani con i risultati della query
+        $this->infoComune = $res;
+
+        // Ora stabilisci la connessione al database del comune
+       
+
+        if (array_key_exists($code_comune, $this->nomiDb)) {
+            // Ottieni il nome del database dal codice del comune
+            $dbn = $this->nomiDb[$code_comune];
+
+            // Configura la connessione al database del comune
+            DB::purge('pgsql'); // Pulisce la connessione precedente
+            config(['database.connections.pgsql.database' => $dbn]);
+            DB::reconnect('pgsql'); // Riconnette con il nuovo nome di database
+
+        } else {
+            // Gestione dell'errore se il codice del comune non esiste nell'array nomiDb
+            throw new \Exception("Codice comune non valido: $code_comune");
+        }
+
+        // Esegui la query per ottenere l'elenco dei fogli
+        $q = "SELECT table_name as nm FROM information_schema.tables WHERE table_name LIKE '%utm' AND table_name LIKE '" . strtolower($code_comune) . "%' ORDER BY table_name;";
+        $res = DB::select($q);
+
+        // Inizializzare l'array $elencoFg con i risultati della query
+        unset($this->elencoFg);
+        foreach ($res as $row) {
+            $this->elencoFg[] = substr($row->nm, 4);
+        }
+    }
+
+    private function setDB_($code_comune)
     {
         $code_comune = strtoupper($code_comune);
 
@@ -57,12 +111,12 @@ class CDUController extends Controller
             throw new \Exception("Codice comune non valido: $code_comune");
         }
 
-        
+
         // Eseguire la query per ottenere l'elenco dei fogli
         $q = 'select replace(tablename, \'utm\', \'\') as nm from pg_tables where tablename like \'' . $code_comune . '%\' and tablename like \'%utm\' order by tablename';
         //echo $q;
         $code_comune = strtolower($code_comune);
-  
+
         $q = "SELECT table_name as nm FROM information_schema.tables WHERE table_name LIKE '%utm' AND table_name LIKE '" . $code_comune . "%' ORDER BY table_name;";
         $res = DB::select($q);
 
@@ -159,7 +213,7 @@ class CDUController extends Controller
         if (!$intNulla) {
             // return $arrRes; ritorna array con le intersezioni
             foreach ($arrRes as $piano => $value) {
-                $this->calcolaCdu(7, 488, $piano.'urbutm', $code_comune); //MIRKOOOO
+                $this->calcolaCdu(7, 488, $piano . 'urbutm', $code_comune); //MIRKOOOO
                 print_r('TEST');
                 exit;
             }
@@ -180,7 +234,7 @@ class CDUController extends Controller
         $visPerc = $request->has('cdusetperc');
         $decimali = $request->cdusetdecimals;
         $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
-        
+
         $piani = $request->piano;
         $elUiu = json_decode($post['uiu']);
 
@@ -212,7 +266,7 @@ class CDUController extends Controller
                 if (!$ress) {
                     print_r('QUI 3');
                     exit;
-                } 
+                }
 
                 $mq = intval($ress['ettari']) * 10000 + intval($ress['are']) * 100 + intval($ress['centiare']);
                 //echo '_MQ='.$mq;
@@ -269,13 +323,13 @@ class CDUController extends Controller
             }
         }
 
-        $content = \AppHelper::formattaCdu($post, $uiu, $norme, $comune);
-        
+        $content = \AppHelper::formattaCdu($post, $uiu, $norme, $comune, $this->nomiPiani);
+
         if ($content !== null) {
             $nomeFile = mt_rand();
 
             // Percorso per il file temporaneo HTML
-            $tempHtmlPath = storage_path('app/'.strtoupper($comune).'/tmp/' . $nomeFile . '.html');
+            $tempHtmlPath = storage_path('app/' . strtoupper($comune) . '/tmp/' . $nomeFile . '.html');
 
             // Crea la directory se non esiste
             File::makeDirectory(dirname($tempHtmlPath), 0755, true, true);
@@ -286,10 +340,10 @@ class CDUController extends Controller
             // Verifica se il file è stato creato correttamente
             if (File::exists($tempHtmlPath)) {
                 // Percorso per il file di output Word
-                $outputWordPath = storage_path('app/'.strtoupper($comune).'/documenti/' . $nomeFile . '.doc');
+                $outputWordPath = storage_path('app/' . strtoupper($comune) . '/documenti/' . $nomeFile . '.doc');
 
                 // Esegui la conversione utilizzando LibreOffice
-                exec('"C:\Program Files\LibreOffice\program\soffice.bin" --convert-to "doc:MS Word 97" --outdir ' . storage_path('app/'.strtoupper($comune).'/documenti/') . ' ' . $tempHtmlPath);
+                exec('"C:\Program Files\LibreOffice\program\soffice.bin" --convert-to "doc:MS Word 97" --outdir ' . storage_path('app/' . strtoupper($comune) . '/documenti/') . ' ' . $tempHtmlPath);
 
                 // Verifica se il file Word è stato creato correttamente
 
@@ -313,7 +367,7 @@ class CDUController extends Controller
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->input('cdusetdecimals') == '1' ? 0 : ($request->input('cdusetdecimals') == '2' ? 1 : 2);
+        $decimali = $request->cdusetdecimals;
         $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
 
         $piani = $request->piano;
@@ -345,8 +399,8 @@ class CDUController extends Controller
                 //trova la superficie catastale:
                 $ress = \AppHelper::selectSuperficieTerreno($elUiu[$i]->fg, $elUiu[$i]->plla, $elUiu[$i]->sb, strtolower($comune));
 
-                if (!$ress){
-                    print_r('NON E\' PRESENTE '); 
+                if (!$ress) {
+                    print_r('NON E\' PRESENTE ');
                     exit;
                 }
 
@@ -406,25 +460,26 @@ class CDUController extends Controller
         }
 
         $data_uiu = $uiu[0];
-        $vista = view('table', compact('data_uiu'))->render();
+        $nmPiani = $this->nomiPiani;
+        $vista = view('table', compact('data_uiu', 'nmPiani'))->render();
 
         return ['vista' => $vista, 'mq' => $data_uiu['mq']];
     }
 
-    function print_cdu_from_modal(Request $request) {
+    function print_cdu_from_modal(Request $request)
+    {
         $this->setDB(strtoupper($request->code_comune));
         $comune = strtoupper($request->code_comune);
         $post = $request->all();
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->input('cdusetdecimals') == '1' ? 0 : ($request->input('cdusetdecimals') == '2' ? 1 : 2);
+        $decimali = $request->cdusetdecimals;
         $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
 
         $piani = json_decode($request->piano);
         $elUiu = json_decode($post['uiu']);
 
-        //print_r(array_values($elUiu));
         $c = count($elUiu);
         $c1 = count($piani);
 
@@ -450,8 +505,8 @@ class CDUController extends Controller
                 //trova la superficie catastale:
                 $ress = \AppHelper::selectSuperficieTerreno($elUiu[$i]->fg, $elUiu[$i]->plla, $elUiu[$i]->sb, strtolower($comune));
 
-                if (!$ress){
-                    print_r('NON E\' PRESENTE '); 
+                if (!$ress) {
+                    print_r('NON E\' PRESENTE ');
                     exit;
                 }
 
@@ -520,8 +575,10 @@ class CDUController extends Controller
         $options->set('chroot', '/');
         $options->setIsRemoteEnabled(true);
         $dompdf = new Dompdf($options);
+        $nmPiani = $this->nomiPiani;
+        $comune = $this->infoComune;
 
-        $html = view('table_email', compact('data_uiu', 'elUiu'));
+        $html = view('table_email', compact('data_uiu', 'elUiu', 'comune', 'nmPiani'));
 
         $dompdf->loadHtml($html);
 
