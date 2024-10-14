@@ -232,8 +232,8 @@ class CDUController extends Controller
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->cdusetdecimals;
-        $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
+        $decimali = $request->cifdecvisu;
+        $approx = $request->input('cifdecvisu') == '1' && $request->has('cdusetapprox');
 
         $piani = $request->piano;
         $elUiu = json_decode($post['uiu']);
@@ -367,8 +367,8 @@ class CDUController extends Controller
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->cdusetdecimals;
-        $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
+        $decimali = $request->cifdecvisu;
+        $approx = $request->input('cifdecvisu') == '1' && $request->has('cdusetapprox');
 
         $piani = $request->piano;
         $elUiu = json_decode($post['uiu']);
@@ -474,8 +474,8 @@ class CDUController extends Controller
 
         $visMq = $request->has('cdusetmq');
         $visPerc = $request->has('cdusetperc');
-        $decimali = $request->cdusetdecimals;
-        $approx = $request->input('cdusetdecimals') == '1' && $request->has('cdusetapprox');
+        $decimali = $request->cifdecvisu;
+        $approx = $request->input('cifdecvisu') == '1' && $request->has('cdusetapprox');
 
         $piani = json_decode($request->piano);
         $elUiu = json_decode($post['uiu']);

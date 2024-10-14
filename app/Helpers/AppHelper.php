@@ -123,7 +123,9 @@ class AppHelper
                     next($uiu[$i]['intersects']);
                 }
                 
-                $elencoIntersezioni .= '</ul></ol>';
+                $elencoIntersezioni .= '</ul></ol><br>';
+                $elencoIntersezioni .= '<b>che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] .' Particella n. '. $uiu[$i]['nm'].' <b>(' . $uiu[$i]['mq'] . ')</b> ricade nel piano:';            
+                $elencoIntersezioni .= '<br>';
                 $creaDocumento = true;
             }
         }
