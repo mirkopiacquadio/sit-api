@@ -27,7 +27,7 @@ class AppHelper
     public static function selectSuperficieTerreno($f, $n, $s, $codCom)
     {
         $n = AppHelper::formatNumber($n, 5);
-        $q = 'SELECT ettari,are,centiare FROM c_terr_info WHERE cod_com=\'' . strtoupper($codCom) . '\'';
+        $q = 'SELECT id,ettari,are,centiare FROM c_terr_info WHERE cod_com=\'' . strtoupper($codCom) . '\'';
         if ($f != '')
             $q .= " AND foglio='" . $f . "'";
         if ($n != '') {
@@ -39,8 +39,8 @@ class AppHelper
             if (substr($q, -1) == "'")
                 $q .= " AND ";
             $q .= " sub='" . $s . '\'';
-        }
-        $q .= " limit 1";
+        } else $q .= "AND sub IS NULL";
+        $q .= " order by id DESC limit 1";
 
         $res = \DB::connection('pgsql2')->select($q);
         
@@ -88,7 +88,7 @@ class AppHelper
                 $sp = '';
                 if ($i > 0)
                     $sp = '<br><br>';
-                $elencoIntersezioni .= $sp . '<p><b> - che</b> la zona di terreno riportata al N.C.T. al foglio n. ' . $uiu[$i]['fg'] . '  particella n. ' . $uiu[$i]['nm'];
+                $elencoIntersezioni .= $sp . '<p><b> - che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] . '  Particella n. ' . $uiu[$i]['nm'];
                 $elencoFogli .= '<li>foglio n. ' . $uiu[$i]['fg'] . ' particella n. ' . $uiu[$i]['nm'];
                 if ($uiu[$i]['sb'] != '') {
                     $elencoIntersezioni .= ' sub n. ' . $uiu[$i]['sb'];
@@ -96,8 +96,7 @@ class AppHelper
                 }
                 $elencoFogli .= '</li>';
 
-                $elencoIntersezioni .= ' <b>(' . $uiu[$i]['mq'] . ')</b> e\' inclusa nel piano:<ol>';
-                $c1 = count($uiu[$i]['intersects']);
+                $elencoIntersezioni .= ' <b>(' . $uiu[$i]['mq'] . ')</b> ricade nel piano:<ol>';
 
                 while (current($uiu[$i]['intersects'])) {
                     $key = key($uiu[$i]['intersects']);
@@ -117,15 +116,13 @@ class AppHelper
                     for ($w = 0; $w < $c2; $w++) {
                         $zona = 'zona ';
                         if (stripos($uiu[$i]['intersects'][$key][$w]['LAYER'], 'zona') !== false) $zona = '';
-                        $elencoIntersezioni .= '<li>per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  nella ' . $zona . $uiu[$i]['intersects'][$key][$w]['LAYER'] . '</li>';
+                        $elencoIntersezioni .= '<li>per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  nella ' . $zona .' '. $uiu[$i]['intersects'][$key][$w]['STRING'] . '</li>';
                     }
                     $elencoIntersezioni .= '</ul>';
                     next($uiu[$i]['intersects']);
                 }
                 
                 $elencoIntersezioni .= '</ul></ol><br>';
-                $elencoIntersezioni .= '<b>che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] .' Particella n. '. $uiu[$i]['nm'].' <b>(' . $uiu[$i]['mq'] . ')</b> ricade nel piano:';            
-                $elencoIntersezioni .= '<br>';
                 $creaDocumento = true;
             }
         }

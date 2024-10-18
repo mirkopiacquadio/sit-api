@@ -66,7 +66,7 @@ class CDUController extends Controller
         $this->infoComune = $res;
 
         // Ora stabilisci la connessione al database del comune
-       
+
 
         if (array_key_exists($code_comune, $this->nomiDb)) {
             // Ottieni il nome del database dal codice del comune
@@ -326,12 +326,12 @@ class CDUController extends Controller
         $content = \AppHelper::formattaCdu($post, $uiu, $norme, $comune, $this->nomiPiani);
 
         if ($content !== null) {
-            $nomeFile = mt_rand();
+            $nomeFile = 'CDU_'.date('d-m-Y');
 
             // Percorso per il file temporaneo HTML
             $tempHtmlPath = storage_path('app/' . strtoupper($comune) . '/tmp/' . $nomeFile . '.html');
 
-            // Crea la directory se non esiste
+            // Crea la directory per tmp se non esiste
             File::makeDirectory(dirname($tempHtmlPath), 0755, true, true);
 
             // Crea il file temporaneo HTML
@@ -342,21 +342,30 @@ class CDUController extends Controller
                 // Percorso per il file di output Word
                 $outputWordPath = storage_path('app/' . strtoupper($comune) . '/documenti/' . $nomeFile . '.doc');
 
+                // Crea la directory per documenti se non esiste
+                File::makeDirectory(dirname($outputWordPath), 0755, true, true);
+
                 // Esegui la conversione utilizzando LibreOffice
                 exec('"C:\Program Files\LibreOffice\program\soffice.bin" --convert-to "doc:MS Word 97" --outdir ' . storage_path('app/' . strtoupper($comune) . '/documenti/') . ' ' . $tempHtmlPath);
 
                 // Verifica se il file Word è stato creato correttamente
+                if (File::exists($outputWordPath)) {
+                    // Cancella il file temporaneo .html
+                    File::delete($tempHtmlPath);
 
-                // Cancella il file temporaneo .html
-                File::delete($tempHtmlPath);
-
-                // Ritorna il file Word come risposta HTTP
-                return response()->file($outputWordPath);
+                    // Ritorna il file Word come risposta HTTP e cancella il file dopo l'invio
+                    return response()->download($outputWordPath)->deleteFileAfterSend(true);
+                } else {
+                    // Se la creazione del file Word ha fallito, ritorna un messaggio di errore
+                    return response()->json(['error' => 'Failed to create Word file'], 500);
+                }
             } else {
                 // Se la creazione del file HTML temporaneo ha fallito, ritorna un messaggio di errore
                 return response()->json(['error' => 'Failed to create temporary HTML file'], 500);
             }
-        } else echo 'Non disponibile';
+        } else {
+            echo 'Non disponibile';
+        }
     }
 
     public function generaCDUHtml(Request $request)
