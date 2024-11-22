@@ -108,6 +108,22 @@ return [
             'server_version' => '12',
         ],
 
+        'cmtiternoaltotammaro' => [
+            'driver' => 'pgsql',
+            'url' => env('DATABASE_URL'),
+            'host' => env('DB_HOST', 'localhost'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => 'cmtiternoaltotammaro',
+            'username' => 'postgres',
+            'password' => 'Monsrl24!dbliz',
+            'charset' => 'utf8',
+            'collation' => 'utf8_unicode_ci',
+            'prefix' => '',
+            'schema' => 'public',
+            'server_version' => '12',
+        ],
+
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DATABASE_URL'),

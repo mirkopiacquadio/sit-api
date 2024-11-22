@@ -28,6 +28,7 @@ class CDUController extends Controller
         "F111" => 'melito-webgis',
         "D361" => 'dragoni-webgis',
         "C245" => 'castelpagano-webgis',
+        "H894" => 'sangiorgiodelsannio-webgis',
         "L739" => 'venticano-webgis',
         "D756" => 'fragnetomonforte-webgis',
         "F113" => 'melizzano-webgis',

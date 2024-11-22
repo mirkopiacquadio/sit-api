@@ -65,14 +65,14 @@ class AppHelper
         $content = str_replace('{nome}', $dati['cdunm'], $content);
         $content = str_replace('{luogo_nascita}', $dati['cduluogo'], $content);
         $content = str_replace('{prov_nascita}', $dati['cduprovn'], $content);
-        $content = str_replace('{data_nascita}', $dati['cdudatan'], $content);
+        $content = str_replace('{data_nascita}', date('d/m/Y', strtotime($dati['cdudatan'])), $content);
         $content = str_replace('{citta}',$indirizzo , $content);
         $content = str_replace('{prov}', $dati['cduprovv'], $content);
         $content = str_replace('{via}', $dati['cduvia'], $content);
         $content = str_replace('{num}', $dati['cdunum'], $content);
         $content = str_replace('{protocollorichiesta}', $dati['cduprotric'], $content);
-        $content = str_replace('{datarichiesta}', $dati['cdudataric'], $content);
-        $content = str_replace('{dataprotocollo}', $dati['cdudata'], $content);
+        $content = str_replace('{datarichiesta}',  date('d/m/Y', strtotime($dati['cdudataric'])), $content);
+        $content = str_replace('{dataprotocollo}', date('d/m/Y', strtotime($dati['cdudata'])), $content);
 
         $count = sizeof($uiu);
 

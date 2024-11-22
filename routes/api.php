@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CatastoImmobileController;
 use App\Http\Controllers\CDUController;
+use App\Http\Controllers\ComunitaMontanaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +25,9 @@ Route::get("/elencoMutazioniCatastoFabbricati", [CatastoImmobileController::clas
 Route::get("/selectPersoneGiuridicheCatasto", [CatastoImmobileController::class, "selectPersoneGiuridicheCatasto"]);
 Route::get("/selectPersoneFisicheCatasto", [CatastoImmobileController::class, "selectPersoneFisicheCatasto"]);
 Route::get("/selectUiuSogg", [CatastoImmobileController::class, "selectUiuSogg"]);
+
+//CM
+Route::get("/cantieri", [ComunitaMontanaController::class, "index"]);
 
 //CDU
 Route::get("/selectPoligonoUiuCat/{tabella}/{fg}/{nm}/{tipo}", [CDUController::class, "selectPoligonoUiuCat"]);
