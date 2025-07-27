@@ -11,6 +11,7 @@ class ComunitaMontana extends Model
     protected $table = 'cantieri';
     protected $guarded = [];
     protected $connection = 'cmtiternoaltotammaro';
+    public $timestamps = false;
 
     public function squadra()
     {

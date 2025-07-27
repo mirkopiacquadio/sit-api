@@ -13,8 +13,9 @@ class ComunitaMontanaController extends Controller
     public function index()
     {
         try {
-            // Recupera tutti i record dalla tabella 'cantieri' nel DB 'cmtiternoaltotammaro'
-            $cantieri = ComunitaMontana::with('squadra')->where('data_iniz', '!=', NULL)
+            // Recupera tutti i record dalla tabella 'cantieri'
+            $cantieri = ComunitaMontana::with('squadra')
+                ->where('data_iniz', '!=', NULL)
                 ->where('data_fine', '!=', NULL)
                 ->where('cod_squad', '!=', NULL)
                 ->orderby('Comune', 'ASC')
@@ -28,6 +29,30 @@ class ComunitaMontanaController extends Controller
                 ], 404);
             }
     
+            // Calcola la durata per ciascun cantiere
+            $cantieri = $cantieri->map(function ($cantiere) {
+                $dataIniz = new \DateTime($cantiere->data_iniz);
+                $dataFine = new \DateTime($cantiere->data_fine);
+    
+                // Inizializza la durata
+                $duration = 0;
+    
+                // Itera attraverso ogni giorno tra data_iniz e data_fine
+                while ($dataIniz <= $dataFine) {
+                    // Se il giorno corrente non è sabato (6) o domenica (0), incrementa la durata
+                    if ($dataIniz->format('N') <= 6) {
+                        $duration++;
+                    }
+                    // Avanza al giorno successivo
+                    $dataIniz->modify('+1 day');
+                }
+    
+                // Aggiungi la durata al risultato
+                $cantiere->duration = $duration;
+                ComunitaMontana::where('gid', $cantiere->gid)->update(['giorni' => $duration]);
+                return $cantiere;
+            });
+    
             // Restituisce i dati con codice di stato 200 (successo)
             return response()->json($cantieri, 200);
         } catch (\Exception $e) {
@@ -36,7 +61,7 @@ class ComunitaMontanaController extends Controller
                 'message' => 'Errore interno del server. Si prega di riprovare più tardi.'
             ], 500);
         }
-    }
+    }    
     
 
     /**

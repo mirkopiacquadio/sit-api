@@ -29,6 +29,8 @@ class CDUController extends Controller
         "D361" => 'dragoni-webgis',
         "C245" => 'castelpagano-webgis',
         "H894" => 'sangiorgiodelsannio-webgis',
+        "H898" => 'sangiorgiolamolara-webgis',
+        "F448" => 'montecalvoirpino-webgis',
         "L739" => 'venticano-webgis',
         "D756" => 'fragnetomonforte-webgis',
         "F113" => 'melizzano-webgis',
@@ -89,40 +91,6 @@ class CDUController extends Controller
 
         // Inizializzare l'array $elencoFg con i risultati della query
         unset($this->elencoFg);
-        foreach ($res as $row) {
-            $this->elencoFg[] = substr($row->nm, 4);
-        }
-    }
-
-    private function setDB_($code_comune)
-    {
-        $code_comune = strtoupper($code_comune);
-
-        if (array_key_exists($code_comune, $this->nomiDb)) {
-            // Ottieni il nome del database dal codice del comune
-            $dbn = $this->nomiDb[$code_comune];
-
-            // Configura la connessione al database
-            DB::purge('pgsql'); // Pulisce la connessione precedente
-            config(['database.connections.pgsql.database' => $dbn]);
-            DB::reconnect('pgsql'); // Riconnette con il nuovo nome di database
-
-        } else {
-            // Gestione dell'errore se il codice del comune non esiste nell'array nomiDb
-            throw new \Exception("Codice comune non valido: $code_comune");
-        }
-
-
-        // Eseguire la query per ottenere l'elenco dei fogli
-        $q = 'select replace(tablename, \'utm\', \'\') as nm from pg_tables where tablename like \'' . $code_comune . '%\' and tablename like \'%utm\' order by tablename';
-        //echo $q;
-        $code_comune = strtolower($code_comune);
-
-        $q = "SELECT table_name as nm FROM information_schema.tables WHERE table_name LIKE '%utm' AND table_name LIKE '" . $code_comune . "%' ORDER BY table_name;";
-        $res = DB::select($q);
-
-        // Inizializzare l'array $elencoFg con i risultati della query
-        unset($elencoFg);
         foreach ($res as $row) {
             $this->elencoFg[] = substr($row->nm, 4);
         }
@@ -617,7 +585,7 @@ class CDUController extends Controller
                 FROM ' . strtolower($code_comune) . $fg . 'utm a 
                 INNER JOIN ' . $piano . ' b ON ST_Intersects(a.geom, b.geom)
                 where a."FOGLIO"=\'' . $foglio . '\' AND a."PARTICELLA"=\'' . $numero . '\' AND a."TIPOLOGIA"=\'PARTICELLA\')as tt group by tt."LAYER",tt."STRING", tt.auiu ORDER BY "LAYER"';
-
+            
             $res = \DB::select($query);
 
             if ($res) return $res;

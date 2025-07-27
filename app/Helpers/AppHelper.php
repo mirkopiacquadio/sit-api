@@ -26,7 +26,7 @@ class AppHelper
 
     public static function selectSuperficieTerreno($f, $n, $s, $codCom)
     {
-        $n = AppHelper::formatNumber($n, 5);
+        $n = SELF::formatNumber($n, 5);
         $q = 'SELECT id,ettari,are,centiare FROM c_terr_info WHERE cod_com=\'' . strtoupper($codCom) . '\'';
         if ($f != '')
             $q .= " AND foglio='" . $f . "'";
@@ -71,8 +71,16 @@ class AppHelper
         $content = str_replace('{via}', $dati['cduvia'], $content);
         $content = str_replace('{num}', $dati['cdunum'], $content);
         $content = str_replace('{protocollorichiesta}', $dati['cduprotric'], $content);
-        $content = str_replace('{datarichiesta}',  date('d/m/Y', strtotime($dati['cdudataric'])), $content);
-        $content = str_replace('{dataprotocollo}', date('d/m/Y', strtotime($dati['cdudata'])), $content);
+        $content = str_replace(
+            '{datarichiesta}',
+            (!empty($dati['cdudataric']) ? date('d/m/Y', strtotime($dati['cdudataric'])) : ''),
+            $content
+        );        
+        $content = str_replace(
+            '{dataprotocollo}',
+            (!empty($dati['cdudata']) ? date('d/m/Y', strtotime($dati['cdudata'])) : ''),
+            $content
+        );        
 
         $count = sizeof($uiu);
 
@@ -100,25 +108,25 @@ class AppHelper
 
                 while (current($uiu[$i]['intersects'])) {
                     $key = key($uiu[$i]['intersects']);
-
-                  
-                    /**
-                     * Prova per il cambio dei nomi del piano, eliminare dopo l'inserimento del Model per la creazione
-                     * del nome personalizzato, tale creazione prevede assegnazione dekeyNormal nome della tabell e nome User Friendly
-                     * es. psaiurbutm -> PSAI associazione 1-1,
-                     * I piani all'interno del JS del CDU (le radio button devono essere chiamate dal BE)
-                     */
                     $nome = isset($nomiPiani[$key]) ? $nomiPiani[$key] : $key;
-                    if(str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
-                    $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b></li><ul>';
-
-                    $c2 = count($uiu[$i]['intersects'][$key]);
-                    for ($w = 0; $w < $c2; $w++) {
-                        $zona = 'zona ';
-                        if (stripos($uiu[$i]['intersects'][$key][$w]['LAYER'], 'zona') !== false) $zona = '';
-                        $elencoIntersezioni .= '<li>per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  nella ' . $zona .' '. $uiu[$i]['intersects'][$key][$w]['STRING'] . '</li>';
+                    if (str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
+                    
+                    $intersects = $uiu[$i]['intersects'][$key];
+                    if (empty($intersects)) {
+                        // Nessuna intersezione
+                        $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b>: non presente</li>';
+                    } else {
+                        // Lista delle intersezioni
+                        $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b></li><ul>';
+                        $c2 = count($intersects);
+                        for ($w = 0; $w < $c2; $w++) {
+                            $zona = 'zona ';
+                            if (stripos($intersects[$w]['LAYER'], 'zona') !== false) $zona = '';
+                            $elencoIntersezioni .= '<li>per <b>' . $intersects[$w]['cal'] . '</b> nella ' . $zona . ' ' . $intersects[$w]['STRING'] . '</li>';
+                        }
+                        $elencoIntersezioni .= '</ul>';
                     }
-                    $elencoIntersezioni .= '</ul>';
+                
                     next($uiu[$i]['intersects']);
                 }
                 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BoosterController;
 use App\Http\Controllers\CatastoImmobileController;
 use App\Http\Controllers\CDUController;
 use App\Http\Controllers\ComunitaMontanaController;
@@ -38,6 +39,22 @@ Route::get("/intersezioniPianiUrbanistici/{table}/{oid}", [CDUController::class,
 Route::get("/calcolaCdu/{foglio}/{numero}/{piano}", [CDUController::class, "calcolaCdu"]);
 Route::get("/generaCDU", [CDUController::class, "generaCDU"]);
 Route::get("/generaCDUHtml", [CDUController::class, "generaCDUHtml"]);
+
+//Booster
+Route::prefix('booster')->group(function () {
+    Route::get("/test", [BoosterController::class, "test"]);
+    Route::get("/elPianiBooster", [BoosterController::class, "elPianiBooster"]);
+    Route::get("/getFoglioParticellaBooster", [BoosterController::class, "getFoglioParticellaBooster"]);
+    Route::get("/zto", [BoosterController::class, "zto"]);
+    Route::get("/erroriCatastoNumber", [BoosterController::class, "erroriCatastoNumber"]);
+    Route::get("/erroriUrbanisticaNumber", [BoosterController::class, "erroriUrbanisticaNumber"]);
+    Route::get("/erroriCatasto", [BoosterController::class, "erroriCatasto"]);
+    Route::get("/erroriUrbanistica", [BoosterController::class, "erroriUrbanistica"]);
+    Route::get("/elabora", [BoosterController::class, "elabora"]);
+    Route::get("/elaborazioni", [BoosterController::class, "elaborazioni"]);
+    Route::get("/downloadElaborazione", [BoosterController::class, "downloadElaborazione"]);
+    Route::delete("/elaborazione", [BoosterController::class, "eliminaElaborazione"]);
+});
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
