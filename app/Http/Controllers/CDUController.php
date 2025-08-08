@@ -28,6 +28,7 @@ class CDUController extends Controller
         "F111" => 'melito-webgis',
         "D361" => 'dragoni-webgis',
         "C245" => 'castelpagano-webgis',
+        "E249" => 'guardiasanframondi-webgis',
         "H894" => 'sangiorgiodelsannio-webgis',
         "H898" => 'sangiorgiolamolara-webgis',
         "F448" => 'montecalvoirpino-webgis',
@@ -139,7 +140,7 @@ class CDUController extends Controller
         return DB::select($query);
     }
 
-    public function intersezioniPianiUrbanistici($table, $gid, $code_comune)
+    /*public function intersezioniPianiUrbanistici($table, $gid, $code_comune)
     {
         $this->setDB($code_comune);
 
@@ -189,7 +190,7 @@ class CDUController extends Controller
         } else {
             return false;
         }
-    }
+    }*/
     /***************************FINE URBANISTICA*********************************************/
 
     /*********************** CALCOLO CDU **********************************/
@@ -203,7 +204,8 @@ class CDUController extends Controller
         $visPerc = $request->has('cdusetperc');
         $decimali = $request->cifdecvisu;
         $approx = $request->input('cifdecvisu') == '1' && $request->has('cdusetapprox');
-
+        $mostraTuttiPiani = $request->input('mostraTuttiPiani') ?? 0;
+        $mostraTuttiPianiPrgPuc = $request->input('mostraTuttiPianiPrgPuc') ?? 0;
         $piani = $request->piano;
         $elUiu = json_decode($post['uiu']);
 
@@ -214,14 +216,8 @@ class CDUController extends Controller
         $intNulla = [];
         $cIntNulla = 0;
 
-        //array che contiene le uiu con superficie catastale nulla
-        $supNulla = [];
-        $cSupNulla = 0;
-
-
         //riempi array di uiu:
         $uiu = [];
-        // $cUiu = 0;
 
         //elenco delle norme
         $norme = [];
@@ -238,64 +234,57 @@ class CDUController extends Controller
                 }
 
                 $mq = intval($ress['ettari']) * 10000 + intval($ress['are']) * 100 + intval($ress['centiare']);
-                //echo '_MQ='.$mq;
-                if ($mq > 0) {
 
-                    $uiu[$contaUiu]['fg'] = $elUiu[$i]->fg;
-                    $uiu[$contaUiu]['nm'] = $elUiu[$i]->plla;
-                    $uiu[$contaUiu]['sb'] = $elUiu[$i]->sb;
-                    $uiu[$contaUiu]['intersects'] = [];
+                $uiu[$contaUiu]['fg'] = $elUiu[$i]->fg;
+                $uiu[$contaUiu]['nm'] = $elUiu[$i]->plla;
+                $uiu[$contaUiu]['sb'] = $elUiu[$i]->sb;
+                $uiu[$contaUiu]['intersects'] = [];
 
-                    //trova intersezioni con i piani
-                    for ($j = 0; $j < $c1; $j++) {
-                        $res1 = $this->calcolaCdu($elUiu[$i]->fg, $elUiu[$i]->plla, $piani[$j], $comune);
-                        if ($res1 !== null) {
-                            foreach ($res1 as $row) {
-                                if ($row != null) {
-                                    $row->cal = -1;
-                                    $row->cal = $this->calcolaValoreCdu($row->aisect, $mq, $row->auiu, $row->perc, $decimali, $approx, $visPerc, $visMq);
-                                    if ($row->cal !== false) {
-                                        if (!isset($uiu[$contaUiu]['intersects'][$piani[$j]]) || !is_array($uiu[$contaUiu]['intersects'][$piani[$j]])) {
-                                            $uiu[$contaUiu]['intersects'][$piani[$j]] = [];
-                                        }
-                                        array_push($uiu[$contaUiu]['intersects'][$piani[$j]], (array) $row); // Cast $row to an array
+                //trova intersezioni con i piani
+                for ($j = 0; $j < $c1; $j++) {
 
-                                        // Insert the norm
-                                        if (!isset($norme[$piani[$j]]) || !is_array($norme[$piani[$j]])) {
-                                            $norme[$piani[$j]] = [];
-                                        }
-                                        if (!in_array($row->LAYER, $norme[$piani[$j]])) {
-                                            $norme[$piani[$j]][] = $row->LAYER;
-                                        }
+                    $res1 = $this->calcolaCdu($elUiu[$i]->fg, $elUiu[$i]->plla, $piani[$j], $comune, $mostraTuttiPiani, $mostraTuttiPianiPrgPuc);
+
+                    if ($res1 !== null) {
+                        foreach ($res1 as $row) {
+                            if ($row != null) {
+                                $row->cal = -1;
+                                $row->cal = $this->calcolaValoreCdu($row->aisect, $mq, $row->auiu, $row->perc, $decimali, $approx, $visPerc, $visMq);
+                                if ($row->cal !== false) {
+                                    if (!isset($uiu[$contaUiu]['intersects'][$piani[$j]]) || !is_array($uiu[$contaUiu]['intersects'][$piani[$j]])) {
+                                        $uiu[$contaUiu]['intersects'][$piani[$j]] = [];
+                                    }
+                                    array_push($uiu[$contaUiu]['intersects'][$piani[$j]], (array) $row); // Cast $row to an array
+
+                                    // Insert the norm
+                                    if (!isset($norme[$piani[$j]]) || !is_array($norme[$piani[$j]])) {
+                                        $norme[$piani[$j]] = [];
+                                    }
+                                    if (!in_array($row->LAYER, $norme[$piani[$j]])) {
+                                        $norme[$piani[$j]][] = $row->LAYER;
                                     }
                                 }
                             }
                         }
                     }
-
-                    if (count($uiu[$contaUiu]['intersects']) == 0) {
-                        $intNulla[$cIntNulla]['fg'] = $elUiu[$i]->fg;
-                        $intNulla[$cIntNulla]['nm'] = $elUiu[$i]->plla;
-                        $intNulla[$cIntNulla]['sb'] = $elUiu[$i]->sb;
-                        $cIntNulla++;
-                    }
-
-                    $uiu[$contaUiu]['mq'] = number_format($mq, $decimali, ',', '.') . ' mq';
-                    $contaUiu++;
-                } else {
-
-                    $supNulla[$cSupNulla]['fg'] = $elUiu[$i]->fg;
-                    $supNulla[$cSupNulla]['nm'] = $elUiu[$i]->plla;
-                    $supNulla[$cSupNulla]['sb'] = $elUiu[$i]->sb;
-                    $cSupNulla++;
                 }
+
+                if (count($uiu[$contaUiu]['intersects']) == 0) {
+                    $intNulla[$cIntNulla]['fg'] = $elUiu[$i]->fg;
+                    $intNulla[$cIntNulla]['nm'] = $elUiu[$i]->plla;
+                    $intNulla[$cIntNulla]['sb'] = $elUiu[$i]->sb;
+                    $cIntNulla++;
+                }
+
+                $uiu[$contaUiu]['mq'] = number_format($mq, $decimali, ',', '.') . ' mq';
+                $contaUiu++;
             }
         }
 
         $content = \AppHelper::formattaCdu($post, $uiu, $norme, $comune, $this->nomiPiani);
 
         if ($content !== null) {
-            $nomeFile = 'CDU_'.date('d-m-Y');
+            $nomeFile = 'CDU_' . date('d-m-Y');
 
             // Percorso per il file temporaneo HTML
             $tempHtmlPath = storage_path('app/' . strtoupper($comune) . '/tmp/' . $nomeFile . '.html');
@@ -347,7 +336,7 @@ class CDUController extends Controller
         $visPerc = $request->has('cdusetperc');
         $decimali = $request->cifdecvisu;
         $approx = $request->input('cifdecvisu') == '1' && $request->has('cdusetapprox');
-
+        $mostraTuttiPiani = $request->input('mostraTuttiPiani') ?? 0;
         $piani = $request->piano;
         $elUiu = json_decode($post['uiu']);
 
@@ -571,7 +560,7 @@ class CDUController extends Controller
         exit;
     }
 
-    private function calcolaCdu($foglio, $numero, $piano, $code_comune)
+    private function calcolaCdu_($foglio, $numero, $piano, $code_comune)
     {
         $fg = $foglio;
         if ($fg != '') {
@@ -585,7 +574,7 @@ class CDUController extends Controller
                 FROM ' . strtolower($code_comune) . $fg . 'utm a 
                 INNER JOIN ' . $piano . ' b ON ST_Intersects(a.geom, b.geom)
                 where a."FOGLIO"=\'' . $foglio . '\' AND a."PARTICELLA"=\'' . $numero . '\' AND a."TIPOLOGIA"=\'PARTICELLA\')as tt group by tt."LAYER",tt."STRING", tt.auiu ORDER BY "LAYER"';
-            
+
             $res = \DB::select($query);
 
             if ($res) return $res;
@@ -593,9 +582,152 @@ class CDUController extends Controller
         } else return null;
     }
 
+    private function calcolaCdu($foglio, $numero, $piano, $code_comune, $mostraTuttiPiani = 0, $mostraTuttiPianiPrgPuc = 0)
+    {
+        $fg = $foglio;
+        if ($fg != '') {
+            $fg = \AppHelper::formatNumber($fg, 3);
+        }
+
+        if (in_array($fg . 'utm', $this->elencoFg)) {
+            // Controllo se devo aggiungere la colonna TIPO
+            $extraColumns = '';
+            if ($code_comune == 'H898' && in_array($piano, ['pucurbutm', 'prgurbutm'])) {
+                $extraColumns = ', "TIPO"';
+            }
+
+            // Query dinamica
+            $query = 'select tt."LAYER" as "LAYER", tt."STRING", tt.auiu as auiu, sum(tt.perc) as perc, sum(tt.aisect) as aisect' . $extraColumns . ' 
+                      from (
+                          SELECT "LAYER", "STRING", round(cast(st_area(a.geom) as numeric), 3) as auiu, 
+                                 round(cast(st_area(ST_Intersection(a.geom, b.geom)) as numeric), 3) as aisect, 
+                                 round(cast(st_area(ST_Intersection(a.geom, b.geom)) * 100 / st_area(a.geom) as numeric), 2) as perc ' . $extraColumns . '
+                          FROM ' . strtolower($code_comune) . $fg . 'utm a 
+                          INNER JOIN ' . $piano . ' b ON ST_Intersects(a.geom, b.geom)
+                          where a."FOGLIO" = \'' . $foglio . '\' AND a."PARTICELLA" = \'' . $numero . '\' AND a."TIPOLOGIA" = \'PARTICELLA\'
+                      ) as tt
+                      where tt.auiu <> 0 and tt.perc <> 0
+                      group by tt."LAYER", tt."STRING", tt.auiu' . $extraColumns . ' 
+                      ORDER BY "LAYER"';
+
+            $res = \DB::select($query);
+
+            if ($mostraTuttiPianiPrgPuc == 1 && in_array($piano, ['pucurbutm', 'prgurbutm'])) {
+                $query1 = 'SELECT DISTINCT "LAYER", "STRING", "TIPO" FROM ' . $piano . ' where "TIPO" = \'VINCOLO\'';
+                $res1 = \DB::select($query1);
+                // Indice delle coppie LAYER|STRING già presenti in $res (cioè con intersezione)
+                $present = [];
+                foreach ($res as $row) {
+                    $key = $row->LAYER . '|' . $row->STRING;
+                    $present[$key] = true;
+                }
+
+                // Aggiungi ai risultati i VINCOLI mancanti da $res1, con numerici = 0
+                foreach ($res1 as $vincolo) {
+                    $key = $vincolo->LAYER . '|' . $vincolo->STRING;
+                    if (!isset($present[$key])) {
+                        $obj = (object)[
+                            'LAYER'  => $vincolo->LAYER,
+                            'STRING' => $vincolo->STRING,
+                            'auiu'   => 0,
+                            'perc'   => 0,
+                            'aisect' => 0,
+                        ];
+                        if (property_exists($vincolo, 'TIPO')) {
+                            $obj->TIPO = $vincolo->TIPO; // VINCOLO
+                        }
+                        $res[] = $obj;
+                    }
+                }
+            }
+
+            if ($res && count($res) > 0) {
+                return $res;
+            } else {
+                if (in_array($piano, ['pucurbutm', 'prgurbutm'])) {
+                    // Se siamo su PUC o PRG, distinguo tra vincolo e zto
+                    if (stripos($piano, 'VINCOLO') !== false) {
+                        return [
+                            (object)[
+                                'LAYER'  => '',
+                                'STRING' => '',
+                                'auiu'   => 0,
+                                'perc'   => 0,
+                                'aisect' => 0
+                            ]
+                        ];
+                    } else {
+                        return null; // ZTO → non mostro nulla
+                    }
+                } else {
+                    // Altri piani → comportamento standard
+                    return ($mostraTuttiPiani == 0) ? null : [
+                        (object)[
+                            'LAYER'  => '',
+                            'STRING' => '',
+                            'auiu'   => 0,
+                            'perc'   => 0,
+                            'aisect' => 0
+                        ]
+                    ];
+                }
+            }
+        } else {
+            //Caso impossibile ma da gestire!
+            if (in_array($piano, ['pucurbutm', 'prgurbutm'])) {
+                if (stripos($piano, 'VINCOLO') !== false) {
+                    return [
+                        (object)[
+                            'LAYER'  => '',
+                            'STRING' => '',
+                            'auiu'   => 0,
+                            'perc'   => 0,
+                            'aisect' => 0
+                        ]
+                    ];
+                } else {
+                    return null;
+                }
+            } else {
+                return ($mostraTuttiPiani == 0) ? null : [
+                    (object)[
+                        'LAYER'  => '',
+                        'STRING' => '',
+                        'auiu'   => 0,
+                        'perc'   => 0,
+                        'aisect' => 0
+                    ]
+                ];
+            }
+        }
+    }
+
     private static function calcolaValoreCdu(&$aisect, &$mq, &$auiu, &$perc, $cifreDecimali, &$approssimazione, &$visPerc, &$visMq)
     {
         global $mqMinimo;
+
+        // Se au iu è 0, evitiamo la divisione per zero
+        if ($auiu == 0) {
+            // Se entrambi i flag sono falsi ritorno 0
+            if ($visMq === false && $visPerc === false) {
+                return '0';
+            }
+
+            $str = '';
+            if ($visMq === true) {
+                $str .= '0 mq';
+            }
+            if ($visPerc === true) {
+                if ($visMq === true) {
+                    $str .= ' (0 %)';
+                } else {
+                    $str .= '0 %';
+                }
+            }
+            return $str;
+        }
+
+        // Calcolo proporzione
         $prop = round((($aisect * $mq) / $auiu), $cifreDecimali);
 
         if ($cifreDecimali === 0 && $approssimazione) {
@@ -606,24 +738,25 @@ class CDUController extends Controller
                 $prop = $prop + (10 - $lastDigit);
             }
         }
-        if ($prop > $mq)
+        if ($prop > $mq) {
             $prop = $mq;
-        else if ($prop < $mqMinimo) {
+        } else if ($prop < $mqMinimo) {
             return false;
         }
 
         $str = '';
-
         if ($visMq === true) {
             $str .= number_format($prop, $cifreDecimali, ',', '.') . ' mq ';
         }
         if ($visPerc === true) {
-            if ($visMq === true)
+            if ($visMq === true) {
                 $str .= ' (' . number_format($perc, $cifreDecimali, ',', '.') . ' %)';
-            else
+            } else {
                 $str .= number_format($perc, $cifreDecimali, ',', '.') . ' %';
+            }
         }
         return $str;
     }
+
     /************************ FINE CALCOLO CDU ****************************/
 }

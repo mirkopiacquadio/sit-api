@@ -94,42 +94,34 @@ class AppHelper
 
             if ($uiu[$i]['fg'] != '' && $uiu[$i]['nm'] && count($uiu[$i]['intersects']) > 0) {
                 $sp = '';
-                if ($i > 0)
-                    $sp = '<br><br>';
-                $elencoIntersezioni .= $sp . '<p><b> - che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] . '  Particella n. ' . $uiu[$i]['nm'];
-                $elencoFogli .= '<li>foglio n. ' . $uiu[$i]['fg'] . ' particella n. ' . $uiu[$i]['nm'];
+                if ($i > 0) $sp = '<br><br>';
+                $elencoIntersezioni .= $sp . '<p  style="font-family:Calibri, sans-serif; font-size:11pt;"><b> - che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] . '  Particella n. ' . $uiu[$i]['nm'];
+                $elencoFogli .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">foglio n. ' . $uiu[$i]['fg'] . ' particella n. ' . $uiu[$i]['nm'];
                 if ($uiu[$i]['sb'] != '') {
                     $elencoIntersezioni .= ' sub n. ' . $uiu[$i]['sb'];
                     $elencoFogli .= ' sub n. ' . $uiu[$i]['sb'];
                 }
                 $elencoFogli .= '</li>';
 
-                $elencoIntersezioni .= ' <b>(' . $uiu[$i]['mq'] . ')</b> ricade nel piano:<ol>';
+                $elencoIntersezioni .= '<span  style="font-family:Calibri, sans-serif; font-size:11pt;"> <b>(' . $uiu[$i]['mq'] . ')</b> ricade nel piano:</span><ol>';
 
                 while (current($uiu[$i]['intersects'])) {
                     $key = key($uiu[$i]['intersects']);
                     $nome = isset($nomiPiani[$key]) ? $nomiPiani[$key] : $key;
-                    if (str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
-                    
-                    $intersects = $uiu[$i]['intersects'][$key];
-                    if (empty($intersects)) {
-                        // Nessuna intersezione
-                        $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b>: non presente</li>';
-                    } else {
-                        // Lista delle intersezioni
-                        $elencoIntersezioni .= '<li><b>' . strtoupper($nome) . '</b></li><ul>';
-                        $c2 = count($intersects);
-                        for ($w = 0; $w < $c2; $w++) {
-                            $zona = 'zona ';
-                            if (stripos($intersects[$w]['LAYER'], 'zona') !== false) $zona = '';
-                            $elencoIntersezioni .= '<li>per <b>' . $intersects[$w]['cal'] . '</b> nella ' . $zona . ' ' . $intersects[$w]['STRING'] . '</li>';
-                        }
-                        $elencoIntersezioni .= '</ul>';
+                    if(str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
+                    $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;"><b>' . strtoupper($nome) . '</b></li><ul>';
+
+                    $c2 = count($uiu[$i]['intersects'][$key]);
+                    for ($w = 0; $w < $c2; $w++) {
+                        $zona = 'zona ';
+                        if (stripos($uiu[$i]['intersects'][$key][$w]['LAYER'], 'zona') !== false) $zona = '';
+                        if($uiu[$i]['intersects'][$key][$w]['perc'] == 0) $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">Non ricade nel vincolo ' . $uiu[$i]['intersects'][$key][$w]['STRING'] .'</li>';
+                        else $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  nella ' . $zona .' '. $uiu[$i]['intersects'][$key][$w]['STRING'] . '</li>';
                     }
-                
+                    $elencoIntersezioni .= '</ul>';
                     next($uiu[$i]['intersects']);
                 }
-                
+
                 $elencoIntersezioni .= '</ul></ol><br>';
                 $creaDocumento = true;
             }
@@ -137,6 +129,7 @@ class AppHelper
 
         if ($creaDocumento) {
             $elencoFogli .= '</ul>';
+            $elencoFogli = '<div style="font-family:Calibri, sans-serif; font-size:11pt;">' . $elencoFogli . '</div>';
             $content = str_replace('{elencoplle}', $elencoFogli, $content);
             $content = str_replace('{certifica}', $elencoIntersezioni, $content);
             
@@ -144,23 +137,27 @@ class AppHelper
             while ($elNorma = current($elencoNorme)) {
                 $keyNorma = key($elencoNorme);
                 $nomeNorma = isset($nomiPiani[$keyNorma]) ? $nomiPiani[$keyNorma] : $keyNorma;
-                if(str_contains($nomeNorma, 'urbutm')) $nomeNorma = str_replace('urbutm', '', $keyNorma);
-                //echo "kn=$keyNorma";
-                $strNorme .= '<P><b>' . strtoupper($nomeNorma) . '</b></P><UL>';
-                //echo 'NN = '.$elNorma;
+                if (str_contains($nomeNorma, 'urbutm')) $nomeNorma = str_replace('urbutm', '', $keyNorma);
+            
                 $c3 = count($elNorma);
-                //  echo 'C: '. $c3.' |   ';
-
+                $normaFiles = [];
+            
                 for ($z = 0; $z < $c3; $z++) {
-
-                        $pathF = storage_path('app/' . $codCom . '/Urbanistica/'. strtoupper(str_replace('urbutm', '', $keyNorma)).'/'.$elNorma[$z].'.html');
-                        $strNorme .= '<li>' . file_get_contents($pathF) . '</li>';
-
+                    $pathF = storage_path('app/' . $codCom . '/Urbanistica/' . strtoupper(str_replace('urbutm', '', $keyNorma)) . '/' . $elNorma[$z] . '.html');
+            
+                    if (file_exists($pathF)) {
+                        $normaFiles[] = '<li style="font-family:Calibri, sans-serif; font-size:11pt;">' . file_get_contents($pathF) . '</li>';
+                    }
                 }
-
-                $strNorme .= '</UL>';
+            
+                if (count($normaFiles) > 0) {
+                    $strNorme .= '<P style="font-family:Calibri, sans-serif; font-size:11pt;"><b>' . strtoupper($nomeNorma) . '</b></P><UL>';
+                    $strNorme .= implode('', $normaFiles);
+                    $strNorme .= '</UL>';
+                }
+            
                 next($elencoNorme);
-            }
+            }            
 
             $content = str_replace('{norme}', $strNorme, $content);
 
