@@ -97,42 +97,32 @@ class BoosterController extends Controller
         }
     }
 
-    public function test()
+    public function test(Request $request)
     {
-        //$this->setDB('C245'); // ⚙️ inizializza connessione al comune giusto
-    
-        $f = str_pad('2', 4, '0', STR_PAD_LEFT);    // -> 0002
-        $n = str_pad('110', 5, '0', STR_PAD_LEFT);  // -> 00110
-        $s = null;
-        $codCom = 'C245';
-    
-        $controller = new CatastoImmobileController();
-        $arrProprietari = [];
-    
-        $key = 'f' . $f . 'n' . $n . 's' . $s;
-    
-        // 🔄 chiama le due funzioni per terreni e fabbricati
-        $controller->elencoProprietariCatasto($arrProprietari, $key, $f, $n, $s, false, strtoupper($codCom));
-        $controller->elencoProprietariCatasto($arrProprietari, $key, $f, $n, $s, true, strtoupper($codCom));
-    
-        // 📋 formatta risultato
-        $owners = [];
-        if (isset($arrProprietari[$key])) {
-            foreach ($arrProprietari[$key] as $blocco) {
-                if (!isset($blocco['prop'])) continue;
-                foreach ($blocco['prop'] as $p) {
-                    $owners[] = [
-                        'nome'   => $p['pers'] ?? '',
-                        'cf'     => $p['perscf'] ?? '',
-                        'titolo' => $p['titolo'] ?? '',
-                    ];
-                }
-            }
-        }
-    
-        dd($owners);
+        // Esempio di input: ?code_comune=c245&foglio=2&particella=110&sub=
+        $comune = strtoupper($request->input('code_comune', 'C245'));
+        $foglio = $request->input('foglio', '2');
+        $particella = $request->input('particella', '110');
+        $sub = $request->input('sub', '');
+
+        // 1️⃣ Imposta il DB corretto in base al codice del comune
+        $this->setDB($comune);
+
+        // 2️⃣ Crea una finta request identica a quella dell’API
+        $fakeRequest = new \Illuminate\Http\Request([
+            'code_comune' => $comune,
+            'foglio' => $foglio,
+            'particella' => $particella,
+            'sub' => $sub,
+        ]);
+
+        // 3️⃣ Chiama direttamente la funzione del Catasto
+        $controller = new \App\Http\Controllers\CatastoImmobileController();
+        $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
+
+        // 4️⃣ Ritorna il risultato come JSON
+        return response()->json($result);
     }
-    
 
     public function elPianiBooster(Request $request)
     {
