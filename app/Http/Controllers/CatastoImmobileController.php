@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class CatastoImmobileController extends Controller
 {
-    
+
     function selectFgPllaSubCatasto(Request $request)
     {
         $comune = strtoupper($request->code_comune);
@@ -521,20 +521,20 @@ class CatastoImmobileController extends Controller
                 $rigaTabDue['foglio'] = $row->foglio;
                 $rigaTabDue['numero'] = $row->numero;
                 $rigaTabDue['sub'] = $row->sub;
-                $rigaTabDue['qua'] = $row->desc_qua;
-                $rigaTabDue['domeuro'] = $row->reddito_dom_euro;
-                $rigaTabDue['domlire'] = $row->reddito_dom_lire;
-                $rigaTabDue['agreuro'] = $row->reddito_agr_euro;
-                $rigaTabDue['agrlire'] = $row->reddito_agr_lire;
+                $rigaTabDue['qua'] = $row->desc_qua ?? '';
+                $rigaTabDue['domeuro'] = $row->reddito_dom_euro ?? '';
+                $rigaTabDue['domlire'] = $row->reddito_dom_lire ?? '';
+                $rigaTabDue['agreuro'] = $row->reddito_agr_euro ?? '';
+                $rigaTabDue['agrlire'] = $row->reddito_agr_lire ?? '';
             }
-            $rigaTabDue['ris'] = $row->cod_riserva;
-            $rigaTabDue['pz'] = $row->id_porzione;
-            $rigaTabDue['qua'] = $row->desc_qua;
-            $rigaTabDue['ha'] = $row->ettari;
-            $rigaTabDue['a'] = $row->are;
-            $rigaTabDue['ca'] = $row->centiare;
-            $rigaTabDue['cl'] = $row->classe;
-            $rigaTabDue['deduzioni'] = $row->simbolo;
+            $rigaTabDue['ris'] = $row->cod_riserva ?? '';
+            $rigaTabDue['pz'] = $row->id_porzione ?? '';
+            $rigaTabDue['qua'] = $row->desc_qua ?? '';
+            $rigaTabDue['ha'] = $row->ettari ?? '';
+            $rigaTabDue['a'] = $row->are ?? '';
+            $rigaTabDue['ca'] = $row->centiare ?? '';
+            $rigaTabDue['cl'] = $row->classe ?? '';
+            $rigaTabDue['deduzioni'] = $row->simbolo ?? '';
 
             if ($row->partita != '')
                 $rigaTabDue['partita'] = $row->partita;

@@ -108,15 +108,17 @@ class AppHelper
                 while (current($uiu[$i]['intersects'])) {
                     $key = key($uiu[$i]['intersects']);
                     $nome = isset($nomiPiani[$key]) ? $nomiPiani[$key] : $key;
+                    $pianoOvincolo = 'piano';
                     if(str_contains($nome, 'urbutm')) $nome = str_replace('urbutm', '', $key);
+                    if($nome == 'PRG' || $nome == 'PUC') $pianoOvincolo='vincolo';
                     $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;"><b>' . strtoupper($nome) . '</b></li><ul>';
 
                     $c2 = count($uiu[$i]['intersects'][$key]);
                     for ($w = 0; $w < $c2; $w++) {
-                        $zona = 'zona ';
-                        if (stripos($uiu[$i]['intersects'][$key][$w]['LAYER'], 'zona') !== false) $zona = '';
-                        if($uiu[$i]['intersects'][$key][$w]['perc'] == 0) $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">Non ricade nel vincolo ' . $uiu[$i]['intersects'][$key][$w]['STRING'] .'</li>';
-                        else $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  nella ' . $zona .' '. $uiu[$i]['intersects'][$key][$w]['STRING'] . '</li>';
+                        $zona = 'nella zona ';
+                        if (isset($uiu[$i]['intersects'][$key][$w]['TIPO']) && $uiu[$i]['intersects'][$key][$w]['TIPO'] == 'VINCOLO') $zona = 'nel vincolo ';
+                        if($uiu[$i]['intersects'][$key][$w]['perc'] == 0) $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">Non ricade nel ' .$pianoOvincolo. ' ' . $uiu[$i]['intersects'][$key][$w]['STRING'] .'</li>';
+                        else $elencoIntersezioni .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">per <b>' . $uiu[$i]['intersects'][$key][$w]['cal'] . '</b>  ' . $zona .' '. $uiu[$i]['intersects'][$key][$w]['STRING'] . '</li>';
                     }
                     $elencoIntersezioni .= '</ul>';
                     next($uiu[$i]['intersects']);

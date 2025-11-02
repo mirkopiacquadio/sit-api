@@ -1,1 +1,182 @@
 <!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link type="text/css" href="https://sitmonter.it/assets/jelix/jquery/ui/jquery-ui.min.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/bootstrap.min.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/bootstrap-responsive.min.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/jquery.dataTables.min.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/dataTables.bootstrap.min.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/js/TreeTable/stylesheets/jquery.treeTable.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/js/OpenLayers-2.13/theme/default/style.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/ol.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/main.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/map.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/media.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/themes/default/css/main.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/themes/default/css/map.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/themes/default/css/media.css?_r=250811171103" rel="stylesheet" />
+
+    <link type="text/css" href="https://sitmonter.it/assets/css/filter.css?_r=250811171103" rel="stylesheet" />
+</head>
+
+<body>
+    <div class="container">
+        <form method="GET" action="https://sitmonter.it/api/generaCDU" target="_blank"><input type="hidden"
+                name="code_comune" value="h898">
+            </div>
+            <div class="row">
+                <div class="span6">
+                <div class="span8">
+                    <fieldset>
+                        <legend>Dati</legend>
+                        <div class="row">
+                            <div class="span3"><label>Protocollo numero</label><input style="width: 100%" type="text"
+                                    name="cduprot" /></div>
+                            <div class="span3"><label>Data</label><input style="width: 100%" type="date"
+                                    name="cdudata" /></div>
+                            <div class="span3"><label>Protocollo richiesta</label><input style="width: 100%" type="text"
+                                    name="cduprotric" /></div>
+                            <div class="span3"><label>Data richiesta</label><input style="width: 100%" type="date"
+                                    name="cdudataric" /></div>
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="span8">
+                    <fieldset>
+                        <legend>Dati del richiedente</legend>
+                        <div class="row">
+                            <div class="span3"><label>Titolo</label><select style="width: 100%" name="cdutitolo">
+                                    <option value="Sig.">Sig.</option>
+                                    <option value="Sig.ra">Sig.ra</option>
+                                </select></div>
+                            <div class="span3"><label>In qualità di</label><select style="width: 100%"
+                                    name="cduqualita">
+                                    <option value="proprietario">Proprietario</option>
+                                    <option value="delegato">Delegato</option>
+                                    <option value="incaricato">Incaricato</option>
+                                    <option value="acquirente">Acquirente</option>
+                                </select></div>
+                            <div class="span3"><label>Cognome</label><input style="width: 100%" type="text"
+                                    name="cducgn" /></div>
+                            <div class="span3"><label>Nome</label><input style="width: 100%" type="text" name="cdunm" />
+                            </div>
+                            <div class="span3"><label>Data di nascita</label><input style="width: 100%" type="date"
+                                    name="cdudatan" /></div>
+                            <div class="span3"><label>Luogo di nascita</label><input style="width: 100%" type="text"
+                                    name="cduluogo" /></div>
+                            <div class="span3"><label>Provincia di nascita</label><input style="width: 100%" type="text"
+                                    name="cduprovn" /></div>
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="span8">
+                    <fieldset>
+                        <div class="row">
+                            <div class="span3"><label>Residente in via</label><input style="width: 100%" type="text"
+                                    name="cduvia" /></div>
+                            <div class="span3"><label>Città</label><input style="width: 100%" type="text"
+                                    name="cducitta" /></div>
+                            <div class="span3"><label>Numero</label><input style="width: 100%" type="text"
+                                    name="cdunum" /></div>
+                            <div class="span3"><label>Provicia</label><input style="width: 100%" type="text"
+                                    name="cduprovv" /></div>
+                            <div class="span3"><label>Cap</label><input style="width: 100%" type="text" name="cducap" />
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+                </div>
+                <div class="span6">
+                    <div class="span8">
+                        <fieldset>
+                            <legend>Dati UIU</legend>
+                            <div class="row">
+                                <div class="span1"><label>Foglio</label><input id="fogliocdu" style="width: 100%"
+                                        type="text" /></div>
+                                <div class="span1"><label>Particella</label><input id="particellacdu" style="width: 100%"
+                                        type="text" /></div>
+                                <div class="span1"><label>Sub</label><input id="subcdu" style="width: 100%" type="text" />
+                                </div>
+                                <div class="span2"><a href="javascript:void(0)" onclick="addInTable()"
+                                        class="btn btn-primary" style="width: 80%; margin-top: 24px">Aggiungi</a></div>
+                            </div>
+                            <div class="row">
+                                <div class="span4">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Foglio</th>
+                                                <th>Particella</th>
+                                                <th>Sub</th>
+                                                <th>Tipologia</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tableBodyCdu"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="span8">
+                        <fieldset>
+                            <legend>Piani da includere</legend><label class="checkbox"><input type="checkbox" name="piano[]"
+                                    value="pucurbutm">PUC</label><label class="checkbox"><input type="checkbox"
+                                    name="piano[]" value="prgurbutm">PRG</label><label class="checkbox"><input
+                                    type="checkbox" name="piano[]" value="praeurbutm">PRAE</label><label
+                                class="checkbox"><input type="checkbox" name="piano[]" value="psaiurbutm">PSAI</label><label
+                                class="checkbox"><input type="checkbox" name="piano[]" value="psdaurbutm">PSDA</label><label
+                                class="checkbox"><input type="checkbox" name="piano[]" value="viurbutm">VINCOLO
+                                IDROGEOLOGICO</label><a href="javascript:void(0)" onclick="selectAllPiani()"
+                                class="btn btn-secondary" style="width: 28%; margin-top: 24px">Includi tutti i piani</a>
+                        </fieldset>
+                    </div>
+                    <div class="span8">
+                        <fieldset>
+                            <legend>Formato numerico</legend><label class="checkbox"><input type="checkbox" name="cdusetmq"
+                                    value="1">visualizza metri quadrati</label><label class="checkbox"><input
+                                    type="checkbox" name="cdusetperc" value="1">visualizza percentuali</label><span
+                                class="label">Cifre decimali visualizzabili</span><label class="radio"><input type="radio"
+                                    name="cifdecvisu" value="2">1234,12 (due cifre decimali)</label><label
+                                class="radio"><input type="radio" name="cifdecvisu" value="1">1234,1 (una cifra
+                                decimale)</label><label class="radio"><input type="radio" name="cifdecvisu" value="0">1234
+                                (nessuna cifra decimale)</label><label class="checkbox" style="margin-top: 20px;"><input
+                                    type="checkbox" value="1" name="cdusetapprox">approssima ultima cifra</label>
+                            <legend>Esenzione vincoli</legend><label class="checkbox" style="margin-top: 20px;"><input
+                                    type="checkbox" value="1" name="mostraTuttiPianiPrgPuc">Visualizza esenzione vincoli
+                                piani comunali vigenti</label><label class="checkbox" style="margin-top: 20px;"><input
+                                    type="checkbox" value="1" name="mostraTuttiPiani">Visualizza esenzione vincoli piani
+                                sovracomunali</label>
+                        </fieldset>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="uiu" id="cduUid">
+            <div class="row">
+                <div class="span3"><button type="submit" target="_blank" class="btn btn-success"
+                        style="width: 80%; margin-top: 24px">Genera documento CDU</a></div>
+                <div class="span2"><a href="javascript:void(0)" onclick="resetData()" class="btn btn-secondary"
+                        style="width: 80%; margin-top: 24px">Cancella dati inseriti</a></div>
+        </form>
+    </div>
+    </div>
+</body>
+
+</html>
