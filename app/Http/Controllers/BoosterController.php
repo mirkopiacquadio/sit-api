@@ -69,12 +69,8 @@ class BoosterController extends Controller
         // Inizializzare l'array $nomiPiani con i risultati della query
         $this->infoComune = $res;
 
-        // Eseguire la query per ottenere i dati dalla tabella ana_comuni
-        $q_booster = "SELECT * FROM comune_piani_relazione where codice_comune = '$code_comune';";
-        $resu = DB::connection('info-generali')->select($q_booster); // Usa la connessione al database info-generali
+        // Ora stabilisci la connessione al database del comune
 
-        // Inizializzare l'array $nomiPiani con i risultati della query
-        $this->pianiComuneBooster = $resu;
 
         if (array_key_exists($code_comune, $this->nomiDb)) {
             // Ottieni il nome del database dal codice del comune
@@ -103,8 +99,40 @@ class BoosterController extends Controller
 
     public function test()
     {
-        // 
+        //$this->setDB('C245'); // ⚙️ inizializza connessione al comune giusto
+    
+        $f = str_pad('2', 4, '0', STR_PAD_LEFT);    // -> 0002
+        $n = str_pad('110', 5, '0', STR_PAD_LEFT);  // -> 00110
+        $s = null;
+        $codCom = 'C245';
+    
+        $controller = new CatastoImmobileController();
+        $arrProprietari = [];
+    
+        $key = 'f' . $f . 'n' . $n . 's' . $s;
+    
+        // 🔄 chiama le due funzioni per terreni e fabbricati
+        $controller->elencoProprietariCatasto($arrProprietari, $key, $f, $n, $s, false, strtoupper($codCom));
+        $controller->elencoProprietariCatasto($arrProprietari, $key, $f, $n, $s, true, strtoupper($codCom));
+    
+        // 📋 formatta risultato
+        $owners = [];
+        if (isset($arrProprietari[$key])) {
+            foreach ($arrProprietari[$key] as $blocco) {
+                if (!isset($blocco['prop'])) continue;
+                foreach ($blocco['prop'] as $p) {
+                    $owners[] = [
+                        'nome'   => $p['pers'] ?? '',
+                        'cf'     => $p['perscf'] ?? '',
+                        'titolo' => $p['titolo'] ?? '',
+                    ];
+                }
+            }
+        }
+    
+        dd($owners);
     }
+    
 
     public function elPianiBooster(Request $request)
     {

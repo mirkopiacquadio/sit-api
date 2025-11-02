@@ -600,7 +600,7 @@ class CatastoImmobileController extends Controller
         $unionQuery = "SELECT * FROM( ($queryFisici) UNION ($queryGiuridic) )as f ORDER BY datavaltit DESC";
 
         $res = DB::connection('pgsql2')->select($unionQuery);
-
+ 
         $c = count($res);
 
         $dataFinoAl = '';
