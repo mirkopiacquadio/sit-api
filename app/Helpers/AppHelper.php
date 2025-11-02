@@ -167,84 +167,82 @@ class AppHelper
         } else return null;
     }
     
-    public static function getProprietariAttuali($f, $n, $s, $tipoFabbricati, $codCom)
-    {
-        $condUiu = '';
-        if ($f != '') $condUiu .= " AND foglio='" . self::formatNumber($f, $tipoFabbricati ? 4 : 4) . "'";
-        if ($n != '') $condUiu .= " AND numero='" . self::formatNumber($n, 5) . "'";
-        if ($s != '') $condUiu .= " AND sub='" . self::formatNumber($s, 4) . "'";
-        else $condUiu .= " AND sub IS NULL";
-    
-        if ($tipoFabbricati) {
-            $tipo = 'F';
-            $strPF = 'FROM c_fabb_info INFO JOIN c_fabb_identificativi IDN ON INFO.id=IDN.id_fabb_info JOIN c_tit_fabb_sogg_f REL ON INFO.id=REL.id_fabb';
-            $strPG = 'FROM c_fabb_info INFO JOIN c_fabb_identificativi IDN ON INFO.id=IDN.id_fabb_info JOIN c_tit_fabb_sogg_g REL ON INFO.id=REL.id_fabb';
-        } else {
-            $tipo = 'T';
-            $strPF = 'FROM c_terr_info INFO JOIN c_tit_terr_sogg_f REL ON INFO.id=REL.id_terr';
-            $strPG = 'FROM c_terr_info INFO JOIN c_tit_terr_sogg_g REL ON INFO.id=REL.id_terr';
-        }
-    
-        $queryBase = "SELECT TIT.quota_num, TIT.quota_den, TIT.titolo_non_codificato,
-            (SELECT descrizione FROM c_predefinito_codice_diritto WHERE codice=TIT.codice_diritto) AS diritto,
-            TIT.id_mutazione_finale,
-            TIT.id_mutazione_iniziale,
-            TIT.data_validita AS datavaltit,
-            TIT.data_efficacia AS data_eff,
-            TIT.data_registrazione_atti AS data_reg,
-            TIT.numero_nota,
-            TIT.prog_nota,
-            TIT.anno_nota,
-            TIT.descrizione_atto_generante AS atto_generante";
-    
-        // FISICHE
-        $queryFisiche = "$queryBase, TRUE AS pf, 
-            S.cognome, S.nome, S.data_nascita, S.cf,
-            (SELECT descrizione FROM c_predefinito_lista_comuni WHERE codice_catastale=S.luogo_nascita) AS luogo_nascita,
-            (SELECT pv FROM c_predefinito_lista_comuni WHERE codice_catastale=S.luogo_nascita) AS prov_nascita
-            $strPF
-            JOIN c_titolarita TIT ON TIT.id=REL.id_tit
-            JOIN c_sogg_fisico S ON REL.id_sogg_f=S.id
-            WHERE INFO.cod_com='" . strtoupper($codCom) . "'
-            AND TIT.id_mutazione_finale IS NULL $condUiu";
-    
-        // GIURIDICHE
-        $queryGiuridiche = "$queryBase, FALSE AS pf, 
-            S.denominazione, S.cf, NULL AS data_nascita, NULL AS luogo_nascita, NULL AS prov_nascita
-            $strPG
-            JOIN c_titolarita TIT ON TIT.id=REL.id_tit
-            JOIN c_sogg_giuridico S ON REL.id_sogg_g=S.id
-            WHERE INFO.cod_com='" . strtoupper($codCom) . "'
-            AND TIT.id_mutazione_finale IS NULL $condUiu";
-    
-        $unionQuery = "SELECT * FROM ( ($queryFisiche) UNION ($queryGiuridiche) ) AS p ORDER BY datavaltit DESC";
-    
-        $res = \DB::connection('pgsql2')->select($unionQuery);
-    
-        $owners = [];
-        foreach ($res as $row) {
-            $owner = [];
-    
-            if ($row->pf) {
-                $owner['tipo'] = 'fisico';
-                $owner['nome'] = strtoupper($row->cognome . ' ' . $row->nome);
-                $owner['cf'] = $row->cf;
-            } else {
-                $owner['tipo'] = 'giuridico';
-                $owner['nome'] = strtoupper($row->denominazione);
-                $owner['cf'] = $row->cf;
-            }
-    
-            $titolo = $row->diritto ?? $row->titolo_non_codificato ?? '';
-            if ($row->quota_num && $row->quota_den) {
-                $titolo .= ' ' . $row->quota_num . '/' . $row->quota_den;
-            }
-    
-            $owner['titolo'] = trim($titolo);
-            $owners[] = $owner;
-        }
-    
-        return $owners;
+public static function getProprietariAttuali($f, $n, $s, $tipoFabbricati, $codCom)
+{
+    $condUiu = '';
+    if ($f != '') $condUiu .= " AND foglio='" . self::formatNumber($f, $tipoFabbricati ? 4 : 4) . "'";
+    if ($n != '') $condUiu .= " AND numero='" . self::formatNumber($n, 5) . "'";
+    if ($s != '') $condUiu .= " AND sub='" . self::formatNumber($s, 4) . "'";
+    else $condUiu .= " AND sub IS NULL";
+
+    if ($tipoFabbricati) {
+        $tipo = 'F';
+        $strPF = 'FROM c_fabb_info INFO JOIN c_fabb_identificativi IDN ON INFO.id=IDN.id_fabb_info JOIN c_tit_fabb_sogg_f REL ON INFO.id=REL.id_fabb';
+        $strPG = 'FROM c_fabb_info INFO JOIN c_fabb_identificativi IDN ON INFO.id=IDN.id_fabb_info JOIN c_tit_fabb_sogg_g REL ON INFO.id=REL.id_fabb';
+    } else {
+        $tipo = 'T';
+        $strPF = 'FROM c_terr_info INFO JOIN c_tit_terr_sogg_f REL ON INFO.id=REL.id_terr';
+        $strPG = 'FROM c_terr_info INFO JOIN c_tit_terr_sogg_g REL ON INFO.id=REL.id_terr';
     }
+
+    $queryBase = "SELECT TIT.quota_num, TIT.quota_den, TIT.titolo_non_codificato,
+        (SELECT descrizione FROM c_predefinito_codice_diritto WHERE codice=TIT.codice_diritto) AS diritto,
+        TIT.id_mutazione_finale, TIT.id_mutazione_iniziale,
+        TIT.data_validita AS datavaltit,
+        TIT.data_efficacia1 AS data_eff,
+        TIT.data_registrazione_atti1 AS data_reg,
+        TIT.numero_nota, TIT.prog_nota, TIT.anno_nota,
+        TIT.descrizione_atto_generante AS atto_generante";
+
+    // persone fisiche
+    $queryFisiche = "$queryBase, TRUE AS pf,
+        S.cognome, S.nome, S.data_nascita, S.cf,
+        (SELECT descrizione FROM c_predefinito_lista_comuni WHERE codice_catastale=S.luogo_nascita) AS luogo_nascita,
+        (SELECT pv FROM c_predefinito_lista_comuni WHERE codice_catastale=S.luogo_nascita) AS prov_nascita
+        $strPF
+        JOIN c_titolarita TIT ON TIT.id=REL.id_tit
+        JOIN c_sogg_fisico S ON REL.id_sogg_f=S.id
+        WHERE INFO.cod_com='" . strtoupper($codCom) . "'
+        AND TIT.id_mutazione_finale IS NULL $condUiu";
+
+    // persone giuridiche
+    $queryGiuridiche = "$queryBase, FALSE AS pf,
+        S.denominazione, S.cf, NULL AS data_nascita, NULL AS luogo_nascita, NULL AS prov_nascita
+        $strPG
+        JOIN c_titolarita TIT ON TIT.id=REL.id_tit
+        JOIN c_sogg_giuridico S ON REL.id_sogg_g=S.id
+        WHERE INFO.cod_com='" . strtoupper($codCom) . "'
+        AND TIT.id_mutazione_finale IS NULL $condUiu";
+
+    $unionQuery = "SELECT * FROM (($queryFisiche) UNION ($queryGiuridiche)) AS p ORDER BY datavaltit DESC";
+
+    $res = \DB::connection('pgsql2')->select($unionQuery);
+
+    $owners = [];
+    foreach ($res as $row) {
+        $owner = [];
+
+        if ($row->pf) {
+            $owner['tipo'] = 'fisico';
+            $owner['nome'] = strtoupper($row->cognome . ' ' . $row->nome);
+            $owner['cf'] = $row->cf;
+        } else {
+            $owner['tipo'] = 'giuridico';
+            $owner['nome'] = strtoupper($row->denominazione);
+            $owner['cf'] = $row->cf;
+        }
+
+        $titolo = $row->diritto ?? $row->titolo_non_codificato ?? '';
+        if ($row->quota_num && $row->quota_den) {
+            $titolo .= ' ' . $row->quota_num . '/' . $row->quota_den;
+        }
+
+        $owner['titolo'] = trim($titolo);
+        $owners[] = $owner;
+    }
+
+    return $owners;
+}
+
 }
 
