@@ -232,8 +232,7 @@ class BoosterController extends Controller
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
             }
-            print_r($code_comune);
-            exit;
+            
             $this->setDB($code_comune);
 
             if ($this->pianiComuneBooster[0]->codice_piano != '') {
