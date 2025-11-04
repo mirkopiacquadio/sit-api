@@ -43,6 +43,7 @@ Route::get("/generaCDUHtml", [CDUController::class, "generaCDUHtml"]);
 //Booster
 Route::prefix('booster')->group(function () {
     Route::get("/test", [BoosterController::class, "test"]);
+    Route::get("/getProprietariAttuali", [BoosterController::class, "getProprietariAttuali"]);
     Route::get("/elPianiBooster", [BoosterController::class, "elPianiBooster"]);
     Route::get("/getFoglioParticellaBooster", [BoosterController::class, "getFoglioParticellaBooster"]);
     Route::get("/zto", [BoosterController::class, "zto"]);

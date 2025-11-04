@@ -97,17 +97,26 @@ class BoosterController extends Controller
         }
     }
 
-    public function test(Request $request)
+    public function getProprietariAttuali($code_comune = null, $foglio = null, $particella = null, $sub = '', Request $request = null)
     {
-        $comune = strtoupper($request->input('code_comune', 'C245'));
-        $foglio = $request->input('foglio', '2');
-        $particella = $request->input('particella', '300');
-        $sub = $request->input('sub', '');
+        // Se viene passato un Request, estrai da lì i dati
+        if ($request instanceof Request) {
+            $code_comune = strtoupper($request->input('code_comune', $code_comune));
+            $foglio = $request->input('foglio', $foglio);
+            $particella = $request->input('particella', $particella);
+            $sub = $request->input('sub', $sub);
+        }
     
-        $this->setDB($comune);
+        // Validazione di base
+        if (!$code_comune || !$foglio || !$particella) {
+            return response()->json(['error' => 'Parametri mancanti'], 400);
+        }
     
+        $this->setDB($code_comune);
+    
+        // Fake request per il controller CatastoImmobileController
         $fakeRequest = new \Illuminate\Http\Request([
-            'code_comune' => $comune,
+            'code_comune' => $code_comune,
             'foglio' => $foglio,
             'particella' => $particella,
             'sub' => $sub,
@@ -115,16 +124,16 @@ class BoosterController extends Controller
     
         $controller = new \App\Http\Controllers\CatastoImmobileController();
         $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
-
+    
         $owners = [];
     
         if (!isset($result[0]) || !isset($result[1])) {
-            return response()->json(['error' => 'Dati incompleti']);
+            return []; // ritorna array vuoto, non risposta HTTP
         }
     
-        // 1️⃣ Trova la mutazione attiva (quella con data_efficacia1 vuota)
+        // 1️⃣ Trova la mutazione attiva
         $mutazioneAttiva = null;
-        foreach ($result[0] as $id => $dati) {
+        foreach ($result[0] as $dati) {
             if (empty($dati[1]['data_efficacia1'])) {
                 $mutazioneAttiva = $dati;
                 break;
@@ -132,13 +141,13 @@ class BoosterController extends Controller
         }
     
         if (!$mutazioneAttiva) {
-            return response()->json(['error' => 'Nessuna mutazione attiva trovata']);
+            return [];
         }
     
-        // 2️⃣ Prendi la chiave K della particella
+        // 2️⃣ Prendi la chiave K
         $k = $mutazioneAttiva[2][0]['k'] ?? null;
         if (!$k || !isset($result[1][$k])) {
-            return response()->json(['error' => 'Chiave particella non trovata']);
+            return [];
         }
     
         $mutazioniParticella = $result[1][$k];
@@ -153,15 +162,15 @@ class BoosterController extends Controller
         }
     
         if (!$idMutazionePrincipale) {
-            return response()->json(['error' => 'Nessun id_mutaz trovato']);
+            return [];
         }
     
-        // 4️⃣ Filtra solo quelle con lo stesso id_mutaz esatto
-        $mutazioniAttive = array_filter($mutazioniParticella, function ($m) use ($idMutazionePrincipale) {
-            return isset($m['id_mutaz']) && $m['id_mutaz'] === $idMutazionePrincipale;
-        });
+        // 4️⃣ Filtra per id_mutaz
+        $mutazioniAttive = array_filter($mutazioniParticella, fn($m) => 
+            isset($m['id_mutaz']) && $m['id_mutaz'] === $idMutazionePrincipale
+        );
     
-        // 5️⃣ Estrai i proprietari da queste mutazioni
+        // 5️⃣ Estrai proprietari
         foreach ($mutazioniAttive as $m) {
             if (!empty($m['prop'])) {
                 foreach ($m['prop'] as $p) {
@@ -177,9 +186,10 @@ class BoosterController extends Controller
                     ];
                 }
             }
-        }    
-        return response()->json($owners);
-    }
+        }
+    
+        return $owners;
+    }    
     
     public function elPianiBooster(Request $request)
     {
@@ -222,7 +232,8 @@ class BoosterController extends Controller
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
             }
-
+            print_r($code_comune);
+            exit;
             $this->setDB($code_comune);
 
             if ($this->pianiComuneBooster[0]->codice_piano != '') {
@@ -331,13 +342,34 @@ class BoosterController extends Controller
             // Aggiunta campo mq (metri quadri)
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
 
-            /*$resFinale = $this->elencoMutazioniCatastoTerreni($code_comune, 7, 10);
-            return $resFinale;
-            exit;*/
-
             // Pulizia finale
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
+            $records = DB::table($finalTable)->select('FOGLIO', 'PARTICELLA')->distinct()->get();
+            foreach ($records as $record) {
+                $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
+            
+                if (!empty($owners)) {
+                    // Recupera i dati della riga originale
+                    $row = (array) DB::table($finalTable)
+                        ->where('FOGLIO', $record->FOGLIO)
+                        ->where('PARTICELLA', $record->PARTICELLA)
+                        ->first();
+            
+                    // Cancella l’originale PRIMA degli insert
+                    DB::table($finalTable)
+                        ->where('FOGLIO', $record->FOGLIO)
+                        ->where('PARTICELLA', $record->PARTICELLA)
+                        ->delete();
+            
+                    // Inserisci una riga per ogni proprietario
+                    foreach ($owners as $o) {
+                        $newRow = $row;
+                        $newRow['proprietario'] = "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}";
+                        DB::table($finalTable)->insert($newRow);
+                    }
+                }
+            }                
 
             return response()->json(['success' => true, 'table' => $finalTable, 'date' => $data]);
         } catch (\Throwable $e) {
