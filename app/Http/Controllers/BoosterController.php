@@ -43,7 +43,7 @@ class BoosterController extends Controller
     private $nomiPiani = [];
     private $infoComune = [];
     private $pianiComuneBooster = [];
-    //costruttore privato per il singleton
+
     private function setDB($code_comune)
     {
         $code_comune = strtoupper($code_comune);
@@ -69,8 +69,12 @@ class BoosterController extends Controller
         // Inizializzare l'array $nomiPiani con i risultati della query
         $this->infoComune = $res;
 
-        // Ora stabilisci la connessione al database del comune
+        // Eseguire la query per ottenere i dati dalla tabella ana_comuni
+        $q_booster = "SELECT * FROM comune_piani_relazione where codice_comune = '$code_comune';";
+        $resu = DB::connection('info-generali')->select($q_booster); // Usa la connessione al database info-generali
 
+        // Inizializzare l'array $nomiPiani con i risultati della query
+        $this->pianiComuneBooster = $resu;
 
         if (array_key_exists($code_comune, $this->nomiDb)) {
             // Ottieni il nome del database dal codice del comune
@@ -190,12 +194,6 @@ class BoosterController extends Controller
     
         return $owners;
     }    
-    
-    public function elPianiBooster(Request $request)
-    {
-        $this->setDB(strtoupper($request->code_comune));
-        return $this->pianiComuneBooster;
-    }
 
     public function getFoglioParticellaBooster(Request $request)
     {
