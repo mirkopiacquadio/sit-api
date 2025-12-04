@@ -110,14 +110,14 @@ class BoosterController extends Controller
             $particella = $request->input('particella', $particella);
             $sub = $request->input('sub', $sub);
         }
-
+    
         // Validazione di base
         if (!$code_comune || !$foglio || !$particella) {
             return response()->json(['error' => 'Parametri mancanti'], 400);
         }
-
+    
         $this->setDB($code_comune);
-
+    
         // Fake request per il controller CatastoImmobileController
         $fakeRequest = new \Illuminate\Http\Request([
             'code_comune' => $code_comune,
@@ -125,16 +125,16 @@ class BoosterController extends Controller
             'particella' => $particella,
             'sub' => $sub,
         ]);
-
+    
         $controller = new \App\Http\Controllers\CatastoImmobileController();
         $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
-
+    
         $owners = [];
-
+    
         if (!isset($result[0]) || !isset($result[1])) {
             return []; // ritorna array vuoto, non risposta HTTP
         }
-
+    
         // 1️⃣ Trova la mutazione attiva
         $mutazioneAttiva = null;
         foreach ($result[0] as $dati) {
@@ -143,19 +143,19 @@ class BoosterController extends Controller
                 break;
             }
         }
-
+    
         if (!$mutazioneAttiva) {
             return [];
         }
-
+    
         // 2️⃣ Prendi la chiave K
         $k = $mutazioneAttiva[2][0]['k'] ?? null;
         if (!$k || !isset($result[1][$k])) {
             return [];
         }
-
+    
         $mutazioniParticella = $result[1][$k];
-
+    
         // 3️⃣ Prendi il primo id_mutaz valido
         $idMutazionePrincipale = null;
         foreach ($mutazioniParticella as $m) {
@@ -164,18 +164,16 @@ class BoosterController extends Controller
                 break;
             }
         }
-
+    
         if (!$idMutazionePrincipale) {
             return [];
         }
-
+    
         // 4️⃣ Filtra per id_mutaz
-        $mutazioniAttive = array_filter(
-            $mutazioniParticella,
-            fn($m) =>
+        $mutazioniAttive = array_filter($mutazioniParticella, fn($m) => 
             isset($m['id_mutaz']) && $m['id_mutaz'] === $idMutazionePrincipale
         );
-
+    
         // 5️⃣ Estrai proprietari
         foreach ($mutazioniAttive as $m) {
             if (!empty($m['prop'])) {
@@ -193,9 +191,9 @@ class BoosterController extends Controller
                 }
             }
         }
-
+    
         return $owners;
-    }
+    }    
 
     public function getFoglioParticellaBooster(Request $request)
     {
@@ -232,7 +230,7 @@ class BoosterController extends Controller
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
             }
-
+            
             $this->setDB($code_comune);
 
             if ($this->pianiComuneBooster[0]->codice_piano != '') {
@@ -347,20 +345,20 @@ class BoosterController extends Controller
             $records = DB::table($finalTable)->select('FOGLIO', 'PARTICELLA')->distinct()->get();
             foreach ($records as $record) {
                 $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
-
+            
                 if (!empty($owners)) {
                     // Recupera i dati della riga originale
                     $row = (array) DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->first();
-
+            
                     // Cancella l’originale PRIMA degli insert
                     DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->delete();
-
+            
                     // Inserisci una riga per ogni proprietario
                     foreach ($owners as $o) {
                         $newRow = $row;
@@ -368,7 +366,7 @@ class BoosterController extends Controller
                         DB::table($finalTable)->insert($newRow);
                     }
                 }
-            }
+            }                
 
             return response()->json(['success' => true, 'table' => $finalTable, 'date' => $data]);
         } catch (\Throwable $e) {
@@ -1114,269 +1112,4 @@ class BoosterController extends Controller
         return $str;
     }
     /************************ FINE CALCOLO CDU ****************************/
-
-    //WEB
-    public function index()
-    {
-        $comuni = [
-            'B946' => 'Casavatore',
-            'D230' => 'Cusano Mutri',
-            'D469' => 'Faicchio',
-            'D784' => 'Frasso Telesino',
-            'F717' => 'Morcone',
-            'G848' => 'Pontelandolfo',
-            'L185' => 'Tocco Caudio',
-            'H967' => 'San Lorenzo Maggiore',
-            'G311' => 'Pannarano',
-            'G991' => 'Prata Sannita',
-            'H313' => 'Ripalimosani',
-            'L254' => 'Torrecuso',
-            'F111' => 'Melito',
-            'D361' => 'Dragoni',
-            'C245' => 'Castelpagano',
-            'H894' => 'San Giorgio del Sannio',
-            'H898' => 'San Giorgio la Molara',
-            'F448' => 'Montecalvo Irpino',
-            'L739' => 'Venticano',
-            'D756' => 'Fragneto Monforte',
-            'F113' => 'Melizzano',
-            'C250' => 'Castelpoto',
-            'G386' => 'Paupisi',
-            'H087' => 'Puglianello',
-        ];
-
-        return view('booster.index', compact('comuni'));
-    }
-
-    /**
-     * Step 2: Mostra ZTO disponibili per il comune
-     */
-    public function showZto(Request $request)
-    {
-        $request->validate([
-            'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
-        ]);
-
-        try {
-            $code_comune = strtoupper($request->code_comune);
-            $this->setDB($code_comune);
-
-            if (empty($this->pianiComuneBooster) || !isset($this->pianiComuneBooster[0]->codice_piano) || $this->pianiComuneBooster[0]->codice_piano == '') {
-                return back()->with('error', 'Nessun piano urbanistico trovato per questo comune');
-            }
-
-            $piano_codice = $this->pianiComuneBooster[0]->codice_piano;
-            $piano_name = strtoupper(str_replace('urbutm', '', $piano_codice));
-
-            $query = "SELECT DISTINCT \"STRING\" FROM {$piano_codice} ORDER BY \"STRING\" ASC";
-            $zto_list = DB::select($query);
-
-            // Recupera elaborazioni esistenti
-            $tables = DB::select("
-            SELECT tablename 
-            FROM pg_tables 
-            WHERE tablename LIKE 'aree_edificabili_finali_%'
-            ORDER BY tablename DESC
-        ");
-
-            $elaborazioni = array_map(fn($t) => $t->tablename, $tables);
-
-            return view('booster.zto', [
-                'code_comune' => $code_comune,
-                'piano_name' => $piano_name,
-                'zto_list' => $zto_list,
-                'elaborazioni' => $elaborazioni,
-            ]);
-        } catch (\Exception $e) {
-            return back()->with('error', 'Errore: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Step 3: Elabora le ZTO selezionate
-     */
-    public function elaboraWeb(Request $request)
-    {
-        $request->validate([
-            'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
-            'zto' => 'required|array|min:1',
-        ]);
-
-        try {
-            $code_comune = strtoupper($request->code_comune);
-            $zto = $request->zto;
-            $exclude = $request->has('exclude');
-
-            $this->setDB($code_comune);
-
-            $data = now()->format('d_m_Y_H_i_s');
-            $finalTable = "aree_edificabili_finali_{$data}";
-
-            $urbanistica = $this->pianiComuneBooster[0]->codice_piano ?? null;
-            if (!$urbanistica) {
-                return back()->with('error', 'Piano urbanistico non trovato');
-            }
-
-            // FASE 1: crea base
-            DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
-            DB::statement("
-            CREATE TABLE aree_edificabili_base AS
-            SELECT c.*, 
-                CASE 
-                    WHEN c.\"TIPOLOGIA\" = 'PARTICELLA' THEN 
-                        CASE WHEN EXISTS (
-                            SELECT 1 FROM {$code_comune}_catasto e
-                            WHERE e.\"TIPOLOGIA\" = 'EDIFICIO' AND ST_Covers(c.geom, e.geom)
-                        ) THEN 'EDIFICATA' ELSE 'LIBERA' END
-                    ELSE 'NON_APPLICABILE_SOLO_EDIFICIO'
-                END AS \"STATO\"
-            FROM {$code_comune}_catasto c
-        ");
-
-            // FASE 2: crea base1
-            DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-            DB::statement("
-            CREATE TABLE aree_edificabili_base1 AS
-            SELECT  
-                p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\",
-                CASE 
-                    WHEN COUNT(e.*) = 0 THEN p.geom 
-                    ELSE ST_Difference(p.geom, ST_Union(e.geom)) 
-                END AS geom
-            FROM aree_edificabili_base p
-            LEFT JOIN aree_edificabili_base e ON ST_Intersects(p.geom, e.geom) AND e.\"TIPOLOGIA\" = 'EDIFICIO'
-            WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
-            GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
-        ");
-
-            // FASE 3: crea finali
-            $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
-
-            DB::statement("
-            CREATE TABLE {$finalTable} AS
-            SELECT  
-                tt.\"LAYER\", tt.\"STRING\", tt.auiu, sum(tt.perc) as perc,
-                sum(tt.aisect) as aisect, tt.\"TIPOLOGIA\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\",
-                ST_Union(tt.geom_intersection) as geom
-            FROM (
-                SELECT 
-                    u.\"LAYER\", u.\"STRING\",
-                    round(CAST(ST_Area(a.geom) AS numeric), 3) as auiu,
-                    round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) AS numeric), 3) as aisect,
-                    round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) * 100 / ST_Area(a.geom) AS numeric), 2) as perc,
-                    a.\"TIPOLOGIA\", a.\"FOGLIO\", a.\"PARTICELLA\", a.\"STATO\",
-                    ST_Intersection(a.geom, u.geom) as geom_intersection
-                FROM aree_edificabili_base1 a
-                INNER JOIN {$urbanistica} u ON ST_Intersects(a.geom, u.geom)
-                WHERE a.\"TIPOLOGIA\" IN ('PARTICELLA', 'EDIFICIO')
-                " . ($exclude ? "AND a.\"STATO\" = 'LIBERA'" : "") . "
-                AND u.\"STRING\" IN ({$ztoList})
-            ) as tt
-            GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
-            ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
-        ");
-
-            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
-
-            // Pulizia
-            DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
-            DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-
-            // Aggiungi proprietari (con timeout prevention)
-            $records = DB::table($finalTable)
-                ->select('FOGLIO', 'PARTICELLA')
-                ->distinct()
-                ->limit(1000) // Limita per evitare timeout
-                ->get();
-
-            foreach ($records as $record) {
-                $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
-
-                if (!empty($owners)) {
-                    $row = (array) DB::table($finalTable)
-                        ->where('FOGLIO', $record->FOGLIO)
-                        ->where('PARTICELLA', $record->PARTICELLA)
-                        ->first();
-
-                    DB::table($finalTable)
-                        ->where('FOGLIO', $record->FOGLIO)
-                        ->where('PARTICELLA', $record->PARTICELLA)
-                        ->delete();
-
-                    foreach ($owners as $o) {
-                        $newRow = $row;
-                        $newRow['proprietario'] = "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}";
-                        DB::table($finalTable)->insert($newRow);
-                    }
-                }
-            }
-
-            return redirect()->route('booster.dettaglio', [
-                'code_comune' => $code_comune,
-                'table' => $finalTable
-            ])->with('success', 'Elaborazione completata con successo!');
-        } catch (\Throwable $e) {
-            return back()->with('error', 'Errore durante l\'elaborazione: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Step 4: Lista elaborazioni esistenti
-     */
-    public function listaElaborazioni($code_comune)
-    {
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
-            return back()->with('error', 'Codice comune non valido');
-        }
-
-        $this->setDB($code_comune);
-
-        $tables = DB::select("
-        SELECT tablename 
-        FROM pg_tables 
-        WHERE tablename LIKE 'aree_edificabili_finali_%'
-        ORDER BY tablename DESC
-    ");
-
-        $elaborazioni = array_map(fn($t) => $t->tablename, $tables);
-
-        return view('booster.elaborazioni', [
-            'code_comune' => $code_comune,
-            'elaborazioni' => $elaborazioni,
-        ]);
-    }
-
-    /**
-     * Step 5: Dettaglio elaborazione con paginazione
-     */
-    public function dettaglioElaborazione(Request $request, $code_comune, $table)
-    {
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
-            return back()->with('error', 'Codice comune non valido');
-        }
-
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
-            return back()->with('error', 'Nome tabella non valido');
-        }
-
-        $this->setDB($code_comune);
-
-        // Verifica esistenza tabella
-        $exists = DB::select("SELECT to_regclass('{$table}') IS NOT NULL as exists")[0]->exists;
-
-        if (!$exists) {
-            return redirect()->route('booster.elaborazioni', ['code_comune' => $code_comune])
-                ->with('error', 'Elaborazione non trovata');
-        }
-
-        $rows = DB::table($table)
-            ->select('LAYER', 'STRING', 'FOGLIO', 'PARTICELLA', 'STATO', 'aisect', 'proprietario')
-            ->paginate(50);
-
-        return view('booster.dettaglio', [
-            'code_comune' => $code_comune,
-            'table' => $table,
-            'rows' => $rows,
-        ]);
-    }
 }
