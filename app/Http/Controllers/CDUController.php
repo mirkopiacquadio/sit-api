@@ -28,6 +28,7 @@ class CDUController extends Controller
         "F111" => 'melito-webgis',
         "D361" => 'dragoni-webgis',
         "C245" => 'castelpagano-webgis',
+        "C659" => 'chiusanosandomenico-webgis',
         "E249" => 'guardiasanframondi-webgis',
         "H894" => 'sangiorgiodelsannio-webgis',
         "H898" => 'sangiorgiolamolara-webgis',
