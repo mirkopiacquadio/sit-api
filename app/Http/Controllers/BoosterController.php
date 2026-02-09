@@ -619,7 +619,6 @@ class BoosterController extends Controller
     }
 
     /********************************URBANISTICA********************************************/
-
     public function elencoNormePiani($tabella, $code_comune)
     {
         $this->setDB($code_comune);
@@ -1117,64 +1116,6 @@ class BoosterController extends Controller
 
     //WEB
     /**
-     * Step 1: Mostra form selezione comune
-     */
-    public function index()
-    {
-        $comuni = $this->getComuniList();
-        return view('booster.index', compact('comuni'));
-    }
-    
-    /**
-     * Step 2: Mostra ZTO disponibili per il comune
-     */
-    public function showZto(Request $request)
-    {
-        $request->validate([
-            'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
-        ]);
-    
-        try {
-            $code_comune = strtoupper($request->code_comune);
-            $this->setDB($code_comune);
-    
-            if (empty($this->pianiComuneBooster) || !isset($this->pianiComuneBooster[0]->codice_piano) || $this->pianiComuneBooster[0]->codice_piano == '') {
-                return back()->with('error', 'Nessun piano urbanistico trovato per questo comune');
-            }
-    
-            $piano_codice = $this->pianiComuneBooster[0]->codice_piano;
-            $piano_name = strtoupper(str_replace('urbutm', '', $piano_codice));
-            
-            $query = "SELECT DISTINCT \"STRING\" FROM {$piano_codice} ORDER BY \"STRING\" ASC";
-            $zto_list = DB::select($query);
-    
-            // Recupera elaborazioni esistenti
-            $tables = DB::select("
-                SELECT tablename 
-                FROM pg_tables 
-                WHERE tablename LIKE 'aree_edificabili_finali_%'
-                ORDER BY tablename DESC
-            ");
-            
-            $elaborazioni = array_map(fn($t) => $t->tablename, $tables);
-    
-            // Lista comuni (per eventuale cambio comune dalla vista ZTO)
-            $comuni = $this->getComuniList();
-    
-            return view('booster.zto', [
-                'code_comune' => $code_comune,
-                'piano_name' => $piano_name,
-                'zto_list' => $zto_list,
-                'elaborazioni' => $elaborazioni,
-                'comuni' => $comuni,
-            ]);
-    
-        } catch (\Exception $e) {
-            return back()->with('error', 'Errore: ' . $e->getMessage());
-        }
-    }
-    
-    /**
      * Helper: Restituisce la lista dei comuni
      */
     private function getComuniList()
@@ -1206,9 +1147,51 @@ class BoosterController extends Controller
             'H087' => 'Puglianello',
         ];
     }
-    
+
     /**
-     * Step 3: Elabora le ZTO selezionate
+     * Step 1: Mostra pagina principale con sidebar
+     */
+    public function index()
+    {
+        $comuni = $this->getComuniList();
+        return view('booster.index', compact('comuni'));
+    }
+
+    /**
+     * Step 2: Carica ZTO via AJAX (ritorna JSON)
+     */
+    public function showZto(Request $request)
+    {
+        $request->validate([
+            'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
+        ]);
+    
+        try {
+            $code_comune = strtoupper($request->code_comune);
+            $this->setDB($code_comune);
+    
+            if (empty($this->pianiComuneBooster) || !isset($this->pianiComuneBooster[0]->codice_piano) || $this->pianiComuneBooster[0]->codice_piano == '') {
+                return response()->json(['error' => 'Nessun piano urbanistico trovato per questo comune'], 404);
+            }
+    
+            $piano_codice = $this->pianiComuneBooster[0]->codice_piano;
+            $piano_name = strtoupper(str_replace('urbutm', '', $piano_codice));
+            
+            $query = "SELECT DISTINCT \"STRING\" FROM {$piano_codice} ORDER BY \"STRING\" ASC";
+            $zto_list = DB::select($query);
+    
+            return response()->json([
+                'piano_name' => $piano_name,
+                'data' => $zto_list
+            ]);
+    
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Step 3: Elabora le ZTO (ritorna JSON per AJAX)
      */
     public function elaboraWeb(Request $request)
     {
@@ -1220,16 +1203,27 @@ class BoosterController extends Controller
         try {
             $code_comune = strtoupper($request->code_comune);
             $zto = $request->zto;
-            $exclude = $request->has('exclude');
+            $exclude = filter_var($request->input('exclude'), FILTER_VALIDATE_BOOLEAN);
     
             $this->setDB($code_comune);
     
-            $data = now()->format('d_m_Y_H_i_s');
+            $data = now()->format('d_m_Y');
             $finalTable = "aree_edificabili_finali_{$data}";
+    
+            // Verifica se esiste già
+            $tableExists = DB::select("
+                SELECT to_regclass('{$finalTable}') IS NOT NULL as exists
+            ")[0]->exists;
+
+            if ($tableExists) {
+                return response()->json([
+                    'error' => 'Elaborazione già presente per oggi. È necessario eliminarla prima di procedere.'
+                ], 409);
+            }
     
             $urbanistica = $this->pianiComuneBooster[0]->codice_piano ?? null;
             if (!$urbanistica) {
-                return back()->with('error', 'Piano urbanistico non trovato');
+                return response()->json(['error' => 'Piano urbanistico non trovato'], 404);
             }
     
             // FASE 1: crea base
@@ -1297,11 +1291,11 @@ class BoosterController extends Controller
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
     
-            // Aggiungi proprietari (con timeout prevention)
+            // Aggiungi proprietari (con limite per evitare timeout)
             $records = DB::table($finalTable)
                 ->select('FOGLIO', 'PARTICELLA')
                 ->distinct()
-                ->limit(1000) // Limita per evitare timeout
+                ->limit(500)
                 ->get();
     
             foreach ($records as $record) {
@@ -1326,73 +1320,65 @@ class BoosterController extends Controller
                 }
             }
     
-            return redirect()->route('booster.dettaglio', [
-                'code_comune' => $code_comune,
-                'table' => $finalTable
-            ])->with('success', 'Elaborazione completata con successo!');
+            return response()->json([
+                'success' => true,
+                'table' => $finalTable,
+                'date' => $data
+            ]);
     
         } catch (\Throwable $e) {
-            return back()->with('error', 'Errore durante l\'elaborazione: ' . $e->getMessage());
+            return response()->json(['error' => 'Errore durante l\'elaborazione: ' . $e->getMessage()], 500);
         }
     }
-    
-    /**
-     * Step 4: Lista elaborazioni esistenti
-     */
+
+    // Metodo listaElaborazioni - ritorna JSON
     public function listaElaborazioni($code_comune)
     {
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
-            return back()->with('error', 'Codice comune non valido');
+        try {
+            $code_comune = strtoupper($code_comune);
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+
+            $this->setDB($code_comune);
+
+            $tables = DB::select("
+                SELECT tablename 
+                FROM pg_tables 
+                WHERE tablename LIKE 'aree_edificabili_finali_%'
+                ORDER BY tablename DESC
+            ");
+
+            return response()->json(array_map(fn($t) => $t->tablename, $tables));
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-    
-        $this->setDB($code_comune);
-    
-        $tables = DB::select("
-            SELECT tablename 
-            FROM pg_tables 
-            WHERE tablename LIKE 'aree_edificabili_finali_%'
-            ORDER BY tablename DESC
-        ");
-    
-        $elaborazioni = array_map(fn($t) => $t->tablename, $tables);
-    
-        return view('booster.elaborazioni', [
-            'code_comune' => $code_comune,
-            'elaborazioni' => $elaborazioni,
-        ]);
     }
-    
-    /**
-     * Step 5: Dettaglio elaborazione con paginazione
-     */
-    public function dettaglioElaborazione(Request $request, $code_comune, $table)
+
+    // Metodo dettaglioElaborazione - mostra pagina dettaglio
+    public function dettaglioElaborazione($code_comune, $table)
     {
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
-            return back()->with('error', 'Codice comune non valido');
+        try {
+            $code_comune = strtoupper($code_comune);
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return redirect()->back()->with('error', 'Codice comune non valido');
+            }
+
+            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $table)) {
+                return redirect()->back()->with('error', 'Nome tabella non valido');
+            }
+
+            $this->setDB($code_comune);
+
+            $rows = DB::table($table)->paginate(50);
+
+            return view('booster.dettaglio', compact('rows', 'code_comune', 'table'));
+
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Errore: ' . $e->getMessage());
         }
-    
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
-            return back()->with('error', 'Nome tabella non valido');
-        }
-    
-        $this->setDB($code_comune);
-    
-        // Verifica esistenza tabella
-        $exists = DB::select("SELECT to_regclass('{$table}') IS NOT NULL as exists")[0]->exists;
-        
-        if (!$exists) {
-            return redirect()->route('booster.elaborazioni', ['code_comune' => $code_comune])
-                ->with('error', 'Elaborazione non trovata');
-        }
-    
-        $rows = DB::table($table)
-            ->select('LAYER', 'STRING', 'FOGLIO', 'PARTICELLA', 'STATO', 'aisect', 'proprietario')
-            ->paginate(50);
-    
-        return view('booster.dettaglio', [
-            'code_comune' => $code_comune,
-            'table' => $table,
-            'rows' => $rows,
-        ]);
     }
 }

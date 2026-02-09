@@ -12,7 +12,7 @@ class BoosterController extends Controller
 {
     private $elencoFg = array();
     private $nomiDb = array(
-        "9999" => 'morcone-webgis', //prova, per la versione development...
+        "9999" => 'morcone-webgis',
         "B946" => 'casavatore-webgis',
         "D230" => 'cusanomutri-webgis',
         "D469" => 'faicchio-webgis',

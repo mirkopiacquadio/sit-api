@@ -36,25 +36,25 @@ Route::get('/api/nta', [NtaController::class, 'nta']);
 Route::get('/api/print_nta_from_modal', [NtaController::class, 'print_nta_from_modal']);
 
 Route::prefix('api/test/booster')->name('booster.')->group(function () {
-    // Step 1: Selezione comune
+    // Pagina principale con sidebar
     Route::get('/', [BoosterController::class, 'index'])->name('index');
     
-    // Step 2: Visualizza ZTO disponibili per il comune selezionato
+    // API per caricamento dati comune (AJAX)
     Route::post('/zto', [BoosterController::class, 'showZto'])->name('zto');
     
-    // Step 3: Elabora le ZTO selezionate
+    // Elabora le ZTO selezionate (AJAX)
     Route::post('/elabora', [BoosterController::class, 'elaboraWeb'])->name('elaboraWeb');
     
-    // Step 4: Lista elaborazioni esistenti
+    // Lista elaborazioni esistenti per un comune (AJAX)
     Route::get('/elaborazioni/{code_comune}', [BoosterController::class, 'listaElaborazioni'])->name('elaborazioni');
     
-    // Step 5: Dettaglio elaborazione con paginazione
+    // Dettaglio elaborazione con paginazione (pagina HTML)
     Route::get('/dettaglio/{code_comune}/{table}', [BoosterController::class, 'dettaglioElaborazione'])->name('dettaglio');
     
     // Download CSV
     Route::get('/download/{code_comune}/{table}', [BoosterController::class, 'downloadElaborazione'])->name('download');
     
-    // Elimina elaborazione
+    // Elimina elaborazione (AJAX)
     Route::delete('/elimina/{code_comune}/{table}', [BoosterController::class, 'eliminaElaborazione'])->name('elimina');
     
     // Verifica errori catasto/urbanistica
