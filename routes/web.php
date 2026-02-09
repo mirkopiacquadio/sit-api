@@ -35,7 +35,7 @@ Route::get('/api/print_cdu_from_modal', [CDUController::class, 'print_cdu_from_m
 Route::get('/api/nta', [NtaController::class, 'nta']);
 Route::get('/api/print_nta_from_modal', [NtaController::class, 'print_nta_from_modal']);
 
-Route::prefix('booster')->name('booster.')->group(function () {
+Route::prefix('api/test/booster')->name('booster.')->group(function () {
     // Step 1: Selezione comune
     Route::get('/', [BoosterController::class, 'index'])->name('index');
     
