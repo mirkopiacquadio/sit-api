@@ -25,6 +25,9 @@ class ExcelTxtController extends Controller
         ]);
 
         $file = $request->file('excel_file');
+        // Pulisci file temporanei abbandonati (più vecchi di 2 ore)
+        $this->cleanupOldTempFiles();
+
         $path = $file->store('excel_tmp', 'local');
         $fullPath = storage_path('app/' . $path);
 
@@ -224,6 +227,23 @@ class ExcelTxtController extends Controller
 
         } catch (\Exception $e) {
             return null;
+        }
+    }
+
+    /**
+     * Elimina i file temporanei in excel_tmp più vecchi di 2 ore.
+     * Evita accumulo di file abbandonati se l'utente non completa il flusso.
+     */
+    private function cleanupOldTempFiles(): void
+    {
+        $disk  = \Storage::disk('local');
+        $files = $disk->files('excel_tmp');
+        $limit = now()->subHours(2)->timestamp;
+
+        foreach ($files as $file) {
+            if ($disk->lastModified($file) < $limit) {
+                $disk->delete($file);
+            }
         }
     }
 }
