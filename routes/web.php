@@ -3,6 +3,7 @@
 use App\Http\Controllers\BoosterController;
 use App\Http\Controllers\CatastoImmobileController;
 use App\Http\Controllers\CDUController;
+use App\Http\Controllers\ExcelTxtController;
 use App\Http\Controllers\NtaController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,12 @@ Route::get('/api/print_catasto', [CatastoImmobileController::class, 'print_catas
 Route::get('/api/print_cdu_from_modal', [CDUController::class, 'print_cdu_from_modal']);
 Route::get('/api/nta', [NtaController::class, 'nta']);
 Route::get('/api/print_nta_from_modal', [NtaController::class, 'print_nta_from_modal']);
+
+Route::prefix('api/excel-txt')->name('excel-txt.')->group(function () {
+    Route::get('/',          [ExcelTxtController::class, 'index'])    ->name('index');
+    Route::post('/preview',  [ExcelTxtController::class, 'preview'])  ->name('preview');
+    Route::post('/generate', [ExcelTxtController::class, 'generate']) ->name('generate');
+});
 
 Route::prefix('api/test/booster')->name('booster.')->group(function () {
     // Pagina principale con sidebar
