@@ -600,7 +600,7 @@ class CatastoImmobileController extends Controller
         $unionQuery = "SELECT * FROM( ($queryFisici) UNION ($queryGiuridic) )as f ORDER BY datavaltit DESC";
 
         $res = DB::connection('pgsql2')->select($unionQuery);
- 
+
         $c = count($res);
 
         $dataFinoAl = '';
@@ -656,6 +656,49 @@ class CatastoImmobileController extends Controller
         }
     }
 
+    public function getAttualiProprietari(Request $request)
+    {
+        $bool_print = true;
+
+        if ($request->type == 'terreno') {
+            $res = $this->elencoMutazioniCatastoTerreni($request, $bool_print);
+        } else {
+            $res = $this->elencoMutazioniCatastoFabbricati($request, $bool_print);
+        }
+
+        // $res[1] contiene sempre l'array dei proprietari
+        $proprietariData = $res[1];
+
+        $attuali = $this->getCurrentOwners($proprietariData);
+
+        return response()->json($attuali);
+    }
+
+    public function getCurrentOwners(array $proprietariData): array
+    {
+        $currentOwners = [];
+
+        foreach ($proprietariData as $key => $entries) {
+            foreach ($entries as $entry) {
+                foreach ($entry['prop'] as $prop) {
+                    // Se il titolo NON contiene "fino al", è un proprietario attuale
+                    if (stripos($prop['titolo'], 'fino al') === false) {
+                        $currentOwners[] = [
+                            'pers'     => $prop['pers'],
+                            'pers1'    => $prop['pers1'],
+                            'perscf'   => $prop['perscf'],
+                            'titolo'   => trim($prop['titolo']),
+                            'desc'     => $entry['desc'],
+                            'dataval'  => $entry['dataval'],
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $currentOwners;
+    }
+
     private function formattaRigaProprietarioCatasto($row, $finoAl)
     {
         $res = array();
@@ -703,7 +746,6 @@ class CatastoImmobileController extends Controller
 
         return $res;
     }
-
 
     /**RICERCA AVANZATA */
     function selectPersoneFisicheCatasto(Request $request)
@@ -779,7 +821,6 @@ class CatastoImmobileController extends Controller
         $res = DB::connection('pgsql2')->select($q);
         return response()->json($res);
     }
-
 
     function selectUiuSogg(Request $request)
     {
@@ -874,7 +915,6 @@ class CatastoImmobileController extends Controller
     }
 
     /**PRINT */
-
     public function print_catasto(Request $request)
     {
         $options = new Options();

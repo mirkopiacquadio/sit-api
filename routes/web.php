@@ -45,6 +45,8 @@ Route::prefix('api/excel-txt')->name('excel-txt.')->group(function () {
 Route::prefix('api/test/booster')->name('booster.')->group(function () {
     // Pagina principale con sidebar
     Route::get('/', [BoosterController::class, 'index'])->name('index');
+
+    Route::get('/getAttualiProprietari', [CatastoImmobileController::class, 'getAttualiProprietari']);
     
     // API per caricamento dati comune (AJAX)
     Route::post('/zto', [BoosterController::class, 'showZto'])->name('zto');
