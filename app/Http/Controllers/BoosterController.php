@@ -104,39 +104,59 @@ class BoosterController extends Controller
 
     public function getProprietariAttuali($code_comune = null, $foglio = null, $particella = null, $sub = '', Request $request = null)
     {
-        // Se viene passato un Request, estrai da lì i dati
         if ($request instanceof Request) {
             $code_comune = strtoupper($request->input('code_comune', $code_comune));
-            $foglio = $request->input('foglio', $foglio);
-            $particella = $request->input('particella', $particella);
-            $sub = $request->input('sub', $sub);
+            $foglio      = $request->input('foglio', $foglio);
+            $particella  = $request->input('particella', $particella);
+            $sub         = $request->input('sub', $sub);
         }
 
-        // Validazione di base
         if (!$code_comune || !$foglio || !$particella) {
             return response()->json(['error' => 'Parametri mancanti'], 400);
         }
 
         $this->setDB($code_comune);
 
-        // Fake request per il controller CatastoImmobileController
+        // ⚠️ CatastoImmobileController usa pgsql2: dobbiamo puntarla allo stesso DB del comune
+        $dbn = $this->nomiDb[strtoupper($code_comune)] ?? null;
+        if ($dbn) {
+            DB::purge('pgsql2');
+            config(['database.connections.pgsql2.database' => $dbn]);
+            DB::reconnect('pgsql2');
+        }
+
         $fakeRequest = new \Illuminate\Http\Request([
             'code_comune' => $code_comune,
-            'foglio' => $foglio,
-            'particella' => $particella,
-            'sub' => $sub,
+            'foglio'      => $foglio,
+            'particella'  => $particella,
+            'sub'         => $sub,
         ]);
 
         $controller = new \App\Http\Controllers\CatastoImmobileController();
+
+        // Prova prima terreni, poi fabbricati
         $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
 
-        $owners = [];
-
-        if (!isset($result[0]) || !isset($result[1])) {
-            return []; // ritorna array vuoto, non risposta HTTP
+        // Se non ci sono dati utili nei terreni, prova con i fabbricati
+        if (empty($result[0]) && empty($result[1])) {
+            $result = $controller->elencoMutazioniCatastoFabbricati($fakeRequest, true);
         }
 
-        // 1️⃣ Trova la mutazione attiva
+        if (empty($result[0]) || empty($result[1])) {
+            return [];
+        }
+
+        return $this->estraiProprietariAttuali($result);
+    }
+
+    /**
+     * Logica di estrazione proprietari attuali, separata e riusabile
+     */
+    private function estraiProprietariAttuali(array $result): array
+    {
+        $owners = [];
+
+        // 1️⃣ Trova la mutazione attiva: quella senza data_efficacia1 (non ancora chiusa)
         $mutazioneAttiva = null;
         foreach ($result[0] as $dati) {
             if (empty($dati[1]['data_efficacia1'])) {
@@ -149,7 +169,7 @@ class BoosterController extends Controller
             return [];
         }
 
-        // 2️⃣ Prendi la chiave K
+        // 2️⃣ Recupera la chiave K per trovare i proprietari collegati
         $k = $mutazioneAttiva[2][0]['k'] ?? null;
         if (!$k || !isset($result[1][$k])) {
             return [];
@@ -157,7 +177,7 @@ class BoosterController extends Controller
 
         $mutazioniParticella = $result[1][$k];
 
-        // 3️⃣ Prendi il primo id_mutaz valido
+        // 3️⃣ Il primo id_mutaz è quello della situazione più recente (array già ordinato per dataval DESC)
         $idMutazionePrincipale = null;
         foreach ($mutazioniParticella as $m) {
             if (!empty($m['id_mutaz'])) {
@@ -170,26 +190,28 @@ class BoosterController extends Controller
             return [];
         }
 
-        // 4️⃣ Filtra per id_mutaz
+        // 4️⃣ Filtra solo le mutazioni con quell'id (tutti i cointestatari dello stesso atto)
         $mutazioniAttive = array_filter(
             $mutazioniParticella,
-            fn($m) =>
-            isset($m['id_mutaz']) && $m['id_mutaz'] === $idMutazionePrincipale
+            fn($m) => isset($m['id_mutaz']) && $m['id_mutaz'] === $idMutazionePrincipale
         );
 
-        // 5️⃣ Estrai proprietari
+        // 5️⃣ Estrai i proprietari escludendo quelli con "fino al" nel titolo (storici)
         foreach ($mutazioniAttive as $m) {
             if (!empty($m['prop'])) {
                 foreach ($m['prop'] as $p) {
+                    if (stripos($p['titolo'] ?? '', 'fino al') !== false) {
+                        continue; // proprietario storico, skip
+                    }
                     $owners[] = [
-                        'foglio' => $foglio,
-                        'particella' => $particella,
-                        'sub' => $sub,
-                        'nome' => $p['pers1'] ?? '',
-                        'cf' => $p['perscf'] ?? '',
-                        'titolo' => trim($p['titolo'] ?? ''),
-                        'descrizione' => $m['desc'] ?? '',
-                        'data_eff' => $m['dataval'] ?? '',
+                        'foglio'      => $m['foglio']   ?? '',
+                        'particella'  => $m['particella'] ?? '',
+                        'sub'         => $m['sub']       ?? '',
+                        'nome'        => $p['pers1']     ?? '',
+                        'cf'          => $p['perscf']    ?? '',
+                        'titolo'      => trim($p['titolo'] ?? ''),
+                        'descrizione' => $m['desc']      ?? '',
+                        'data_eff'    => $m['dataval']   ?? '',
                     ];
                 }
             }
@@ -1167,26 +1189,25 @@ class BoosterController extends Controller
         $request->validate([
             'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
         ]);
-    
+
         try {
             $code_comune = strtoupper($request->code_comune);
             $this->setDB($code_comune);
-    
+
             if (empty($this->pianiComuneBooster) || !isset($this->pianiComuneBooster[0]->codice_piano) || $this->pianiComuneBooster[0]->codice_piano == '') {
                 return response()->json(['error' => 'Nessun piano urbanistico trovato per questo comune'], 404);
             }
-    
+
             $piano_codice = $this->pianiComuneBooster[0]->codice_piano;
             $piano_name = strtoupper(str_replace('urbutm', '', $piano_codice));
-            
+
             $query = "SELECT DISTINCT \"STRING\" FROM {$piano_codice} ORDER BY \"STRING\" ASC";
             $zto_list = DB::select($query);
-    
+
             return response()->json([
                 'piano_name' => $piano_name,
                 'data' => $zto_list
             ]);
-    
         } catch (\Exception $e) {
             return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
         }
@@ -1201,17 +1222,17 @@ class BoosterController extends Controller
             'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
             'zto' => 'required|array|min:1',
         ]);
-    
+
         try {
             $code_comune = strtoupper($request->code_comune);
             $zto = $request->zto;
             $exclude = filter_var($request->input('exclude'), FILTER_VALIDATE_BOOLEAN);
-    
+
             $this->setDB($code_comune);
-    
+
             $data = now()->format('d_m_Y');
             $finalTable = "aree_edificabili_finali_{$data}";
-    
+
             // Verifica se esiste già
             $tableExists = DB::select("
                 SELECT to_regclass('{$finalTable}') IS NOT NULL as exists
@@ -1222,12 +1243,12 @@ class BoosterController extends Controller
                     'error' => 'Elaborazione già presente per oggi. È necessario eliminarla prima di procedere.'
                 ], 409);
             }
-    
+
             $urbanistica = $this->pianiComuneBooster[0]->codice_piano ?? null;
             if (!$urbanistica) {
                 return response()->json(['error' => 'Piano urbanistico non trovato'], 404);
             }
-    
+
             // FASE 1: crea base
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("
@@ -1243,7 +1264,7 @@ class BoosterController extends Controller
                     END AS \"STATO\"
                 FROM {$code_comune}_catasto c
             ");
-    
+
             // FASE 2: crea base1
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
             DB::statement("
@@ -1259,10 +1280,10 @@ class BoosterController extends Controller
                 WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
                 GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
             ");
-    
+
             // FASE 3: crea finali
             $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
-    
+
             DB::statement("
                 CREATE TABLE {$finalTable} AS
                 SELECT  
@@ -1286,34 +1307,34 @@ class BoosterController extends Controller
                 GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
                 ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
             ");
-    
+
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
-    
+
             // Pulizia
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-    
+
             // Aggiungi proprietari (con limite per evitare timeout)
             $records = DB::table($finalTable)
                 ->select('FOGLIO', 'PARTICELLA')
                 ->distinct()
                 ->limit(500)
                 ->get();
-    
+
             foreach ($records as $record) {
                 $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
-            
+
                 if (!empty($owners)) {
                     $row = (array) DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->first();
-            
+
                     DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->delete();
-            
+
                     foreach ($owners as $o) {
                         $newRow = $row;
                         $newRow['proprietario'] = "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}";
@@ -1321,13 +1342,12 @@ class BoosterController extends Controller
                     }
                 }
             }
-    
+
             return response()->json([
                 'success' => true,
                 'table' => $finalTable,
                 'date' => $data
             ]);
-    
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Errore durante l\'elaborazione: ' . $e->getMessage()], 500);
         }
@@ -1353,7 +1373,6 @@ class BoosterController extends Controller
             ");
 
             return response()->json(array_map(fn($t) => $t->tablename, $tables));
-
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -1378,7 +1397,6 @@ class BoosterController extends Controller
             $rows = DB::table($table)->paginate(50);
 
             return view('booster.dettaglio', compact('rows', 'code_comune', 'table'));
-
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Errore: ' . $e->getMessage());
         }
