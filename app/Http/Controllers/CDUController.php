@@ -33,6 +33,7 @@ class CDUController extends Controller
         "E249" => 'guardiasanframondi-webgis',
         "H894" => 'sangiorgiodelsannio-webgis',
         "H898" => 'sangiorgiolamolara-webgis',
+        "I062" => 'sannicolamanfredi-webgis',
         "F448" => 'montecalvoirpino-webgis',
         "L739" => 'venticano-webgis',
         "D756" => 'fragnetomonforte-webgis',
