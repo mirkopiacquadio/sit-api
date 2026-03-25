@@ -12,7 +12,7 @@ class BoosterController extends Controller
 {
     private $elencoFg = array();
     private $nomiDb = array(
-        "9999" => 'morcone-webgis', //prova, per la versione development...
+        "9999" => 'morcone-webgis',
         "B946" => 'casavatore-webgis',
         "D230" => 'cusanomutri-webgis',
         "D469" => 'faicchio-webgis',
@@ -22,6 +22,7 @@ class BoosterController extends Controller
         "L185" => 'toccocaudio-webgis',
         "H967" => 'sanlorenzomaggiore-webgis',
         "G311" => 'pannarano-webgis',
+        "C659" => 'chiusanosandomenico-webgis',
         "G991" => 'prata_sannita-webgis',
         "H313" => 'ripalimosani-webgis',
         "L254" => 'torrecuso-webgis',
@@ -1134,6 +1135,7 @@ class BoosterController extends Controller
             'H313' => 'Ripalimosani',
             'L254' => 'Torrecuso',
             'F111' => 'Melito',
+            'C659' => 'Chiusano San Domenico',
             'D361' => 'Dragoni',
             'C245' => 'Castelpagano',
             'H894' => 'San Giorgio del Sannio',

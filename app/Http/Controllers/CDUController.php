@@ -45,7 +45,7 @@ class CDUController extends Controller
 
     private $nomiPiani = [];
     private $infoComune = [];
-    //costruttore privato per il singleton
+
     private function setDB($code_comune)
     {
         $code_comune = strtoupper($code_comune);
@@ -562,28 +562,6 @@ class CDUController extends Controller
         exit;
     }
 
-    private function calcolaCdu_($foglio, $numero, $piano, $code_comune)
-    {
-        $fg = $foglio;
-        if ($fg != '') {
-            $fg = \AppHelper::formatNumber($fg, 3);
-        }
-
-        if (in_array($fg . 'utm', $this->elencoFg)) {
-
-            $query = 'select tt."LAYER" as "LAYER", tt."STRING", tt.auiu as auiu, sum(tt.perc) as perc, sum(tt.aisect) as aisect from(
-                SELECT "LAYER", "STRING", round(cast(st_area(a.geom)as numeric),3)as auiu, round(cast(st_area(ST_Intersection(a.geom, b.geom))as numeric),3)as aisect, round(cast(st_area(ST_Intersection(a.geom, b.geom))*100/st_area(a.geom)as numeric),2) as perc
-                FROM ' . strtolower($code_comune) . $fg . 'utm a 
-                INNER JOIN ' . $piano . ' b ON ST_Intersects(a.geom, b.geom)
-                where a."FOGLIO"=\'' . $foglio . '\' AND a."PARTICELLA"=\'' . $numero . '\' AND a."TIPOLOGIA"=\'PARTICELLA\')as tt group by tt."LAYER",tt."STRING", tt.auiu ORDER BY "LAYER"';
-
-            $res = \DB::select($query);
-
-            if ($res) return $res;
-            else return null;
-        } else return null;
-    }
-
     private function calcolaCdu($foglio, $numero, $piano, $code_comune, $mostraTuttiPiani = 0, $mostraTuttiPianiPrgPuc = 0)
     {
         $fg = $foglio;
@@ -759,6 +737,5 @@ class CDUController extends Controller
         }
         return $str;
     }
-
     /************************ FINE CALCOLO CDU ****************************/
 }
