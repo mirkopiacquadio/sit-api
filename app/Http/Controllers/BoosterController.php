@@ -115,15 +115,8 @@ class BoosterController extends Controller
             return response()->json(['error' => 'Parametri mancanti'], 400);
         }
 
-        $this->setDB($code_comune);
-
-        // ⚠️ CatastoImmobileController usa pgsql2: dobbiamo puntarla allo stesso DB del comune
-        $dbn = $this->nomiDb[strtoupper($code_comune)] ?? null;
-        if ($dbn) {
-            DB::purge('pgsql2');
-            config(['database.connections.pgsql2.database' => $dbn]);
-            DB::reconnect('pgsql2');
-        }
+        // NON chiamare setDB qui: quando si arriva da elaboraWeb
+        // il DB è già configurato correttamente, e pgsql2 non va toccata
 
         $fakeRequest = new \Illuminate\Http\Request([
             'code_comune' => $code_comune,
@@ -137,7 +130,6 @@ class BoosterController extends Controller
         // Prova prima terreni, poi fabbricati
         $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
 
-        // Se non ci sono dati utili nei terreni, prova con i fabbricati
         if (empty($result[0]) && empty($result[1])) {
             $result = $controller->elencoMutazioniCatastoFabbricati($fakeRequest, true);
         }
