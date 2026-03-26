@@ -46,6 +46,7 @@ Route::prefix('booster')->group(function () {
     Route::get("/elaborazioni", [BoosterController::class, "elaborazioni"]);
     Route::get("/downloadElaborazione", [BoosterController::class, "downloadElaborazione"]);
     Route::delete("/elaborazione", [BoosterController::class, "eliminaElaborazione"]);
+    Route::get("/dettaglioElaborazione", [BoosterController::class, "dettaglioElaborazioneJson"]);
 });
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {

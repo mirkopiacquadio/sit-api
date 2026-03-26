@@ -693,4 +693,23 @@ class BoosterController extends Controller
             return redirect()->back()->with('error', 'Errore: ' . $e->getMessage());
         }
     }
+
+    public function dettaglioElaborazioneJson(Request $request)
+    {
+        $code_comune = strtoupper($request->get('code_comune'));
+        $table = $request->get('table');
+
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+            return response()->json(['error' => 'Codice comune non valido'], 400);
+        }
+        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
+            return response()->json(['error' => 'Nome tabella non valido'], 400);
+        }
+
+        $this->setDB($code_comune);
+
+        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", aisect, proprietario FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\"");
+
+        return response()->json($rows);
+    }
 }
