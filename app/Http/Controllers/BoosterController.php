@@ -1306,7 +1306,6 @@ class BoosterController extends Controller
             $records = DB::table($finalTable)
                 ->select('FOGLIO', 'PARTICELLA')
                 ->distinct()
-                ->limit(500)
                 ->get();
             Log::info("BOOSTER STEP 12: records da processare = " . count($records));
 
