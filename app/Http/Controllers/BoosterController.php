@@ -7,6 +7,7 @@ use Dompdf\Options;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class BoosterController extends Controller
 {
@@ -1215,33 +1216,32 @@ class BoosterController extends Controller
             $zto = $request->zto;
             $exclude = filter_var($request->input('exclude'), FILTER_VALIDATE_BOOLEAN);
 
-            echo "STEP 1: code_comune=$code_comune";
-            flush();
+            Log::info("BOOSTER STEP 1: code_comune=$code_comune, exclude=$exclude, zto=" . implode(',', $zto));
 
             $this->setDB($code_comune);
-            echo " | STEP 2: setDB OK";
-            flush();
+            Log::info("BOOSTER STEP 2: setDB OK");
 
             $data = now()->format('d_m_Y');
             $finalTable = "aree_edificabili_finali_{$data}";
 
             $tableExists = DB::select("SELECT to_regclass('{$finalTable}') IS NOT NULL as exists")[0]->exists;
-            echo " | STEP 3: tableExists=$tableExists";
-            flush();
+            Log::info("BOOSTER STEP 3: tableExists=" . ($tableExists ? 'true' : 'false'));
 
             if ($tableExists) {
-                exit("BLOCCATO: tabella già esistente $finalTable");
+                return response()->json([
+                    'error' => 'Elaborazione già presente per oggi. È necessario eliminarla prima di procedere.'
+                ], 409);
             }
 
             $urbanistica = $this->pianiComuneBooster[0]->codice_piano ?? null;
-            echo " | STEP 4: urbanistica=$urbanistica";
-            flush();
+            Log::info("BOOSTER STEP 4: urbanistica=$urbanistica");
 
-            if (!$urbanistica) exit("BLOCCATO: piano urbanistico null");
+            if (!$urbanistica) {
+                return response()->json(['error' => 'Piano urbanistico non trovato'], 404);
+            }
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
-            echo " | STEP 5: DROP base OK";
-            flush();
+            Log::info("BOOSTER STEP 5: DROP base OK");
 
             DB::statement("CREATE TABLE aree_edificabili_base AS
             SELECT c.*, 
@@ -1255,8 +1255,7 @@ class BoosterController extends Controller
                 END AS \"STATO\"
             FROM {$code_comune}_catasto c
         ");
-            echo " | STEP 6: CREATE base OK";
-            flush();
+            Log::info("BOOSTER STEP 6: CREATE base OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
             DB::statement("CREATE TABLE aree_edificabili_base1 AS
@@ -1270,12 +1269,10 @@ class BoosterController extends Controller
             WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
             GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
         ");
-            echo " | STEP 7: CREATE base1 OK";
-            flush();
+            Log::info("BOOSTER STEP 7: CREATE base1 OK");
 
             $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
-            echo " | STEP 8: ztoList=$ztoList";
-            flush();
+            Log::info("BOOSTER STEP 8: ztoList=$ztoList");
 
             DB::statement("CREATE TABLE {$finalTable} AS
             SELECT tt.\"LAYER\", tt.\"STRING\", tt.auiu, sum(tt.perc) as perc,
@@ -1297,29 +1294,27 @@ class BoosterController extends Controller
             GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
             ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
         ");
-            echo " | STEP 9: CREATE finalTable OK";
-            flush();
+            Log::info("BOOSTER STEP 9: CREATE finalTable OK");
 
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
-            echo " | STEP 10: ALTER TABLE OK";
-            flush();
+            Log::info("BOOSTER STEP 10: ALTER TABLE OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-            echo " | STEP 11: cleanup OK";
-            flush();
+            Log::info("BOOSTER STEP 11: cleanup tabelle temporanee OK");
 
-            $records = DB::table($finalTable)->select('FOGLIO', 'PARTICELLA')->distinct()->limit(500)->get();
-            echo " | STEP 12: records count=" . count($records);
-            flush();
+            $records = DB::table($finalTable)
+                ->select('FOGLIO', 'PARTICELLA')
+                ->distinct()
+                ->limit(500)
+                ->get();
+            Log::info("BOOSTER STEP 12: records da processare = " . count($records));
 
             foreach ($records as $i => $record) {
-                echo " | STEP 13.$i: foglio={$record->FOGLIO} particella={$record->PARTICELLA}";
-                flush();
+                Log::info("BOOSTER STEP 13.$i: foglio={$record->FOGLIO} particella={$record->PARTICELLA}");
 
                 $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
-                echo " owners=" . count($owners);
-                flush();
+                Log::info("BOOSTER STEP 13.$i: owners trovati = " . count($owners));
 
                 if (!empty($owners)) {
                     $row = (array) DB::table($finalTable)
@@ -1340,11 +1335,16 @@ class BoosterController extends Controller
                 }
             }
 
-            echo " | STEP 14: DONE";
-            flush();
-            exit;
+            Log::info("BOOSTER STEP 14: elaborazione completata con successo");
+
+            return response()->json([
+                'success' => true,
+                'table' => $finalTable,
+                'date' => $data
+            ]);
         } catch (\Throwable $e) {
-            exit("ECCEZIONE al: " . $e->getMessage() . " in " . $e->getFile() . " linea " . $e->getLine());
+            Log::error("BOOSTER ERRORE: " . $e->getMessage() . " in " . $e->getFile() . " linea " . $e->getLine());
+            return response()->json(['error' => 'Errore durante l\'elaborazione: ' . $e->getMessage()], 500);
         }
     }
 
