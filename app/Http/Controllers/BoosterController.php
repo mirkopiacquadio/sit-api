@@ -256,6 +256,7 @@ class BoosterController extends Controller
             $rows = DB::select("SELECT * FROM {$table}");
 
             if (count($rows) > 0) {
+                // Intestazioni — escludi geom, rinomina proprietario
                 $headers = array_keys((array)$rows[0]);
                 if (($k = array_search('geom', $headers)) !== false) {
                     unset($headers[$k]);
@@ -265,7 +266,20 @@ class BoosterController extends Controller
                 foreach ($rows as $row) {
                     $r = (array)$row;
                     unset($r['geom']);
-                    fputcsv($handle, $r);
+
+                    $proprietario = $r['proprietario'] ?? '';
+
+                    // Se ci sono più proprietari separati da " | ", crea una riga per ciascuno
+                    if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
+                        $proprietari = explode(' | ', $proprietario);
+                        foreach ($proprietari as $p) {
+                            $newRow = $r;
+                            $newRow['proprietario'] = trim($p);
+                            fputcsv($handle, $newRow);
+                        }
+                    } else {
+                        fputcsv($handle, $r);
+                    }
                 }
             }
 
@@ -274,7 +288,7 @@ class BoosterController extends Controller
             fclose($handle);
 
             return response($csvContent, 200, [
-                'Content-Type' => 'text/csv',
+                'Content-Type'        => 'text/csv',
                 'Content-Disposition' => "attachment; filename={$fileName}",
             ]);
         } catch (\Throwable $e) {
