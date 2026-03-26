@@ -146,10 +146,10 @@ class BoosterController extends Controller
     public function elaboraWebChunk(Request $request)
     {
         try {
-            $code_comune = strtoupper($request->code_comune);
-            $finalTable  = $request->table;
+            $code_comune = strtoupper($request->input('code_comune'));
+            $finalTable  = $request->input('table');
             $offset      = (int) $request->input('offset', 0);
-            $chunkSize   = 50; // processa 50 particelle per chiamata
+            $chunkSize   = 50;
 
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
@@ -160,13 +160,12 @@ class BoosterController extends Controller
 
             $this->setDB($code_comune);
 
-            // Forza ricollegamento pgsql2
             DB::purge('pgsql2');
             DB::reconnect('pgsql2');
 
             $records = DB::table($finalTable)
                 ->select('FOGLIO', 'PARTICELLA')
-                ->whereNull('proprietario') // processa solo quelle ancora null
+                ->whereNull('proprietario')
                 ->distinct()
                 ->offset($offset)
                 ->limit($chunkSize)
@@ -186,7 +185,6 @@ class BoosterController extends Controller
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->update(['proprietario' => $proprietarioStr]);
                 } else {
-                    // Metti un placeholder per non riprocessarla nei chunk successivi
                     DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
@@ -195,7 +193,6 @@ class BoosterController extends Controller
                 $processed++;
             }
 
-            // Conta quante sono ancora null (non ancora processate)
             $remaining = DB::table($finalTable)
                 ->whereNull('proprietario')
                 ->distinct('FOGLIO', 'PARTICELLA')
