@@ -234,7 +234,7 @@ class BoosterController extends Controller
         return response()->json(array_map(fn($t) => $t->tablename, $tables));
     }
 
-    public function downloadElaborazione(Request $request)
+    public function downloadElaborazione(Request $request, $code_comune = null, $table = null)
     {
         $code_comune = strtoupper($code_comune ?? $request->get('code_comune'));
         $table = $table ?? $request->get('table');
