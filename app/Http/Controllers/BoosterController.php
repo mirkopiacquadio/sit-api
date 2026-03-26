@@ -236,7 +236,8 @@ class BoosterController extends Controller
 
     public function downloadElaborazione(Request $request)
     {
-        $code_comune = strtoupper($request->get('code_comune'));
+        $code_comune = strtoupper($code_comune ?? $request->get('code_comune'));
+        $table = $table ?? $request->get('table');
 
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
             return response()->json(['error' => 'Codice comune non valido'], 400);
@@ -244,7 +245,6 @@ class BoosterController extends Controller
 
         $this->setDB($code_comune);
 
-        $table = $request->get('table');
         if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
             return response()->json(['error' => 'Nome tabella non valido'], 400);
         }
@@ -282,10 +282,11 @@ class BoosterController extends Controller
         }
     }
 
-    public function eliminaElaborazione(Request $request)
+    public function eliminaElaborazione(Request $request, $code_comune = null, $table = null)
     {
         try {
-            $code_comune = strtoupper($request->get('code_comune'));
+            $code_comune = strtoupper($code_comune ?? $request->get('code_comune'));
+            $table = $table ?? $request->get('table');
 
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
@@ -293,18 +294,15 @@ class BoosterController extends Controller
 
             $this->setDB($code_comune);
 
-            $table = $request->get('table');
-
             if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $table)) {
                 return response()->json(['error' => 'Nome tabella non valido'], 400);
             }
 
-            $this->setDB($code_comune);
             DB::statement("DROP TABLE IF EXISTS {$table} CASCADE");
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
-            return response()->json(['error' => 'Errore durante l’eliminazione: ' . $e->getMessage()], 500);
+            return response()->json(['error' => 'Errore durante l\'eliminazione: ' . $e->getMessage()], 500);
         }
     }
 
