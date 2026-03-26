@@ -116,8 +116,10 @@ class BoosterController extends Controller
             return response()->json(['error' => 'Parametri mancanti'], 400);
         }
 
-        // NON chiamare setDB qui: quando si arriva da elaboraWeb
-        // il DB è già configurato correttamente, e pgsql2 non va toccata
+        // ⚠️ Forza il ricollegamento di pgsql2 — dopo operazioni massive su pgsql
+        // la connessione pgsql2 può essere stata persa o alterata
+        DB::purge('pgsql2');
+        DB::reconnect('pgsql2');
 
         $fakeRequest = new \Illuminate\Http\Request([
             'code_comune' => $code_comune,
@@ -128,7 +130,6 @@ class BoosterController extends Controller
 
         $controller = new \App\Http\Controllers\CatastoImmobileController();
 
-        // Prova prima terreni, poi fabbricati
         $result = $controller->elencoMutazioniCatastoTerreni($fakeRequest, true);
 
         if (empty($result[0]) && empty($result[1])) {
@@ -1311,23 +1312,23 @@ class BoosterController extends Controller
 
             foreach ($records as $i => $record) {
                 Log::info("BOOSTER STEP 13.$i: foglio={$record->FOGLIO} particella={$record->PARTICELLA}");
-            
+
                 $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
                 Log::info("BOOSTER STEP 13.$i: owners trovati = " . count($owners));
-            
+
                 if (!empty($owners)) {
                     // Costruisci stringa proprietari concatenati (uno per riga)
                     $proprietarioStr = implode(' | ', array_map(
                         fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
                         $owners
                     ));
-            
+
                     // Semplice UPDATE, niente delete/insert, geom non viene toccata
                     DB::table($finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->update(['proprietario' => $proprietarioStr]);
-            
+
                     Log::info("BOOSTER STEP 13.$i: UPDATE OK -> $proprietarioStr");
                 }
             }
