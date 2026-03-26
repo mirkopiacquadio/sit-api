@@ -1372,42 +1372,15 @@ class BoosterController extends Controller
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
             Log::info("BOOSTER STEP 11: cleanup tabelle temporanee OK");
-
-            $records = DB::table($finalTable)
-                ->select('FOGLIO', 'PARTICELLA')
-                ->distinct()
-                ->get();
-            Log::info("BOOSTER STEP 12: records da processare = " . count($records));
-
-            foreach ($records as $i => $record) {
-                Log::info("BOOSTER STEP 13.$i: foglio={$record->FOGLIO} particella={$record->PARTICELLA}");
-
-                $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
-                Log::info("BOOSTER STEP 13.$i: owners trovati = " . count($owners));
-
-                if (!empty($owners)) {
-                    // Costruisci stringa proprietari concatenati (uno per riga)
-                    $proprietarioStr = implode(' | ', array_map(
-                        fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
-                        $owners
-                    ));
-
-                    // Semplice UPDATE, niente delete/insert, geom non viene toccata
-                    DB::table($finalTable)
-                        ->where('FOGLIO', $record->FOGLIO)
-                        ->where('PARTICELLA', $record->PARTICELLA)
-                        ->update(['proprietario' => $proprietarioStr]);
-
-                    Log::info("BOOSTER STEP 13.$i: UPDATE OK -> $proprietarioStr");
-                }
-            }
-
-            Log::info("BOOSTER STEP 14: elaborazione completata con successo");
+            // Lancia il job in background — non blocca la risposta HTTP
+            \App\Jobs\AggiornaPropietariBooster::dispatch($finalTable, $code_comune);
+            Log::info("BOOSTER STEP 12: job AggiornaPropietari lanciato in background");
 
             return response()->json([
                 'success' => true,
-                'table' => $finalTable,
-                'date' => $data
+                'table'   => $finalTable,
+                'date'    => $data,
+                'message' => 'Tabella creata. I proprietari vengono popolati in background.'
             ]);
         } catch (\Throwable $e) {
             Log::error("BOOSTER ERRORE: " . $e->getMessage() . " in " . $e->getFile() . " linea " . $e->getLine());

@@ -98,7 +98,7 @@ return [
             'url' => env('DATABASE_URL'),
             'host' => env('DB_HOST', 'localhost'),
             'port' => env('DB_PORT', '5432'),
-            'database' => 'informativo-immobili',
+            'database' => 'info-generali',
             'username' => 'postgres',
             'password' => 'Monsrl24!dbliz',
             'charset' => 'utf8',
