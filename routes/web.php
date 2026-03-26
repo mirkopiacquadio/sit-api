@@ -52,7 +52,7 @@ Route::prefix('api/test/booster')->name('booster.')->group(function () {
     Route::post('/zto', [BoosterController::class, 'showZto'])->name('zto');
     
     // Elabora le ZTO selezionate (AJAX)
-    Route::post('/elabora', [BoosterController::class, 'elaboraWeb'])->name('elaboraWeb');
+    Route::get('/elabora', [BoosterController::class, 'elaboraWeb'])->name('elaboraWeb');
     
     // Lista elaborazioni esistenti per un comune (AJAX)
     Route::get('/elaborazioni/{code_comune}', [BoosterController::class, 'listaElaborazioni'])->name('elaborazioni');
