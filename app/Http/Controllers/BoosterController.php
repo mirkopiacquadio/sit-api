@@ -1210,111 +1210,116 @@ class BoosterController extends Controller
      */
     public function elaboraWeb(Request $request)
     {
-        $request->validate([
-            'code_comune' => 'required|regex:/^[a-zA-Z0-9_]+$/',
-            'zto' => 'required|array|min:1',
-        ]);
-
         try {
             $code_comune = strtoupper($request->code_comune);
             $zto = $request->zto;
             $exclude = filter_var($request->input('exclude'), FILTER_VALIDATE_BOOLEAN);
 
+            echo "STEP 1: code_comune=$code_comune";
+            flush();
+
             $this->setDB($code_comune);
+            echo " | STEP 2: setDB OK";
+            flush();
 
             $data = now()->format('d_m_Y');
             $finalTable = "aree_edificabili_finali_{$data}";
 
-            // Verifica se esiste già
-            $tableExists = DB::select("
-                SELECT to_regclass('{$finalTable}') IS NOT NULL as exists
-            ")[0]->exists;
+            $tableExists = DB::select("SELECT to_regclass('{$finalTable}') IS NOT NULL as exists")[0]->exists;
+            echo " | STEP 3: tableExists=$tableExists";
+            flush();
 
             if ($tableExists) {
-                return response()->json([
-                    'error' => 'Elaborazione già presente per oggi. È necessario eliminarla prima di procedere.'
-                ], 409);
+                exit("BLOCCATO: tabella già esistente $finalTable");
             }
 
             $urbanistica = $this->pianiComuneBooster[0]->codice_piano ?? null;
-            if (!$urbanistica) {
-                return response()->json(['error' => 'Piano urbanistico non trovato'], 404);
-            }
+            echo " | STEP 4: urbanistica=$urbanistica";
+            flush();
 
-            // FASE 1: crea base
+            if (!$urbanistica) exit("BLOCCATO: piano urbanistico null");
+
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
-            DB::statement("
-                CREATE TABLE aree_edificabili_base AS
-                SELECT c.*, 
-                    CASE 
-                        WHEN c.\"TIPOLOGIA\" = 'PARTICELLA' THEN 
-                            CASE WHEN EXISTS (
-                                SELECT 1 FROM {$code_comune}_catasto e
-                                WHERE e.\"TIPOLOGIA\" = 'EDIFICIO' AND ST_Covers(c.geom, e.geom)
-                            ) THEN 'EDIFICATA' ELSE 'LIBERA' END
-                        ELSE 'NON_APPLICABILE_SOLO_EDIFICIO'
-                    END AS \"STATO\"
-                FROM {$code_comune}_catasto c
-            ");
+            echo " | STEP 5: DROP base OK";
+            flush();
 
-            // FASE 2: crea base1
+            DB::statement("CREATE TABLE aree_edificabili_base AS
+            SELECT c.*, 
+                CASE 
+                    WHEN c.\"TIPOLOGIA\" = 'PARTICELLA' THEN 
+                        CASE WHEN EXISTS (
+                            SELECT 1 FROM {$code_comune}_catasto e
+                            WHERE e.\"TIPOLOGIA\" = 'EDIFICIO' AND ST_Covers(c.geom, e.geom)
+                        ) THEN 'EDIFICATA' ELSE 'LIBERA' END
+                    ELSE 'NON_APPLICABILE_SOLO_EDIFICIO'
+                END AS \"STATO\"
+            FROM {$code_comune}_catasto c
+        ");
+            echo " | STEP 6: CREATE base OK";
+            flush();
+
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-            DB::statement("
-                CREATE TABLE aree_edificabili_base1 AS
-                SELECT  
-                    p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\",
-                    CASE 
-                        WHEN COUNT(e.*) = 0 THEN p.geom 
-                        ELSE ST_Difference(p.geom, ST_Union(e.geom)) 
-                    END AS geom
-                FROM aree_edificabili_base p
-                LEFT JOIN aree_edificabili_base e ON ST_Intersects(p.geom, e.geom) AND e.\"TIPOLOGIA\" = 'EDIFICIO'
-                WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
-                GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
-            ");
+            DB::statement("CREATE TABLE aree_edificabili_base1 AS
+            SELECT p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\",
+                CASE 
+                    WHEN COUNT(e.*) = 0 THEN p.geom 
+                    ELSE ST_Difference(p.geom, ST_Union(e.geom)) 
+                END AS geom
+            FROM aree_edificabili_base p
+            LEFT JOIN aree_edificabili_base e ON ST_Intersects(p.geom, e.geom) AND e.\"TIPOLOGIA\" = 'EDIFICIO'
+            WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
+            GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
+        ");
+            echo " | STEP 7: CREATE base1 OK";
+            flush();
 
-            // FASE 3: crea finali
             $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
+            echo " | STEP 8: ztoList=$ztoList";
+            flush();
 
-            DB::statement("
-                CREATE TABLE {$finalTable} AS
-                SELECT  
-                    tt.\"LAYER\", tt.\"STRING\", tt.auiu, sum(tt.perc) as perc,
-                    sum(tt.aisect) as aisect, tt.\"TIPOLOGIA\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\",
-                    ST_Union(tt.geom_intersection) as geom
-                FROM (
-                    SELECT 
-                        u.\"LAYER\", u.\"STRING\",
-                        round(CAST(ST_Area(a.geom) AS numeric), 3) as auiu,
-                        round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) AS numeric), 3) as aisect,
-                        round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) * 100 / ST_Area(a.geom) AS numeric), 2) as perc,
-                        a.\"TIPOLOGIA\", a.\"FOGLIO\", a.\"PARTICELLA\", a.\"STATO\",
-                        ST_Intersection(a.geom, u.geom) as geom_intersection
-                    FROM aree_edificabili_base1 a
-                    INNER JOIN {$urbanistica} u ON ST_Intersects(a.geom, u.geom)
-                    WHERE a.\"TIPOLOGIA\" IN ('PARTICELLA', 'EDIFICIO')
-                    " . ($exclude ? "AND a.\"STATO\" = 'LIBERA'" : "") . "
-                    AND u.\"STRING\" IN ({$ztoList})
-                ) as tt
-                GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
-                ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
-            ");
+            DB::statement("CREATE TABLE {$finalTable} AS
+            SELECT tt.\"LAYER\", tt.\"STRING\", tt.auiu, sum(tt.perc) as perc,
+                sum(tt.aisect) as aisect, tt.\"TIPOLOGIA\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\",
+                ST_Union(tt.geom_intersection) as geom
+            FROM (
+                SELECT u.\"LAYER\", u.\"STRING\",
+                    round(CAST(ST_Area(a.geom) AS numeric), 3) as auiu,
+                    round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) AS numeric), 3) as aisect,
+                    round(CAST(ST_Area(ST_Intersection(a.geom, u.geom)) * 100 / ST_Area(a.geom) AS numeric), 2) as perc,
+                    a.\"TIPOLOGIA\", a.\"FOGLIO\", a.\"PARTICELLA\", a.\"STATO\",
+                    ST_Intersection(a.geom, u.geom) as geom_intersection
+                FROM aree_edificabili_base1 a
+                INNER JOIN {$urbanistica} u ON ST_Intersects(a.geom, u.geom)
+                WHERE a.\"TIPOLOGIA\" IN ('PARTICELLA', 'EDIFICIO')
+                " . ($exclude ? "AND a.\"STATO\" = 'LIBERA'" : "") . "
+                AND u.\"STRING\" IN ({$ztoList})
+            ) as tt
+            GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
+            ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
+        ");
+            echo " | STEP 9: CREATE finalTable OK";
+            flush();
 
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
+            echo " | STEP 10: ALTER TABLE OK";
+            flush();
 
-            // Pulizia
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
+            echo " | STEP 11: cleanup OK";
+            flush();
 
-            // Aggiungi proprietari (con limite per evitare timeout)
-            $records = DB::table($finalTable)
-                ->select('FOGLIO', 'PARTICELLA')
-                ->distinct()
-                ->limit(500)
-                ->get();
+            $records = DB::table($finalTable)->select('FOGLIO', 'PARTICELLA')->distinct()->limit(500)->get();
+            echo " | STEP 12: records count=" . count($records);
+            flush();
 
-            foreach ($records as $record) {
+            foreach ($records as $i => $record) {
+                echo " | STEP 13.$i: foglio={$record->FOGLIO} particella={$record->PARTICELLA}";
+                flush();
+
                 $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
+                echo " owners=" . count($owners);
+                flush();
 
                 if (!empty($owners)) {
                     $row = (array) DB::table($finalTable)
@@ -1335,13 +1340,11 @@ class BoosterController extends Controller
                 }
             }
 
-            return response()->json([
-                'success' => true,
-                'table' => $finalTable,
-                'date' => $data
-            ]);
+            echo " | STEP 14: DONE";
+            flush();
+            exit;
         } catch (\Throwable $e) {
-            return response()->json(['error' => 'Errore durante l\'elaborazione: ' . $e->getMessage()], 500);
+            exit("ECCEZIONE al: " . $e->getMessage() . " in " . $e->getFile() . " linea " . $e->getLine());
         }
     }
 
