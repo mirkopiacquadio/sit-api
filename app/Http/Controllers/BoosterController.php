@@ -261,7 +261,7 @@ class BoosterController extends Controller
                 if (($k = array_search('geom', $headers)) !== false) {
                     unset($headers[$k]);
                 }
-                fputcsv($handle, $headers);
+                fputcsv($handle, $headers, ';');
 
                 foreach ($rows as $row) {
                     $r = (array)$row;
@@ -275,7 +275,7 @@ class BoosterController extends Controller
                         foreach ($proprietari as $p) {
                             $newRow = $r;
                             $newRow['proprietario'] = trim($p);
-                            fputcsv($handle, $newRow);
+                            fputcsv($handle, $newRow, ';');
                         }
                     } else {
                         fputcsv($handle, $r);
