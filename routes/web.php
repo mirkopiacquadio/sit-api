@@ -17,13 +17,14 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
 Route::get('/api/istanzacdu', function () {
     return view('welcome');
 });
 
 Route::get('/api/download-marca-da-bollo', function () {
     $filePath = public_path('assets/marca_da_bollo.pdf');
-    
+
     if (file_exists($filePath)) {
         return Response::download($filePath, 'marca_da_bollo.pdf');
     } else {
@@ -37,37 +38,28 @@ Route::get('/api/nta', [NtaController::class, 'nta']);
 Route::get('/api/print_nta_from_modal', [NtaController::class, 'print_nta_from_modal']);
 
 Route::prefix('api/excel-txt')->name('excel-txt.')->group(function () {
-    Route::get('/',          [ExcelTxtController::class, 'index'])    ->name('index');
-    Route::post('/preview',  [ExcelTxtController::class, 'preview'])  ->name('preview');
-    Route::post('/generate', [ExcelTxtController::class, 'generate']) ->name('generate');
+    Route::get('/',          [ExcelTxtController::class, 'index'])->name('index');
+    Route::post('/preview',  [ExcelTxtController::class, 'preview'])->name('preview');
+    Route::post('/generate', [ExcelTxtController::class, 'generate'])->name('generate');
 });
 
-Route::prefix('api/test/booster')->name('booster.')->group(function () {
-    // Pagina principale con sidebar
+Route::prefix('api/monter/booster')->name('booster.')->group(function () {
     Route::get('/', [BoosterController::class, 'index'])->name('index');
-
     Route::get('/getAttualiProprietari', [CatastoImmobileController::class, 'getAttualiProprietari']);
-    
-    // API per caricamento dati comune (AJAX)
     Route::post('/zto', [BoosterController::class, 'showZto'])->name('zto');
-    
-    // Elabora le ZTO selezionate (AJAX)
-    Route::get('/elabora', [BoosterController::class, 'elaboraWeb'])->name('elaboraWeb');
-    Route::get('/elaboraWebChunk', [BoosterController::class, 'elaboraWebChunk']);
 
-    // Lista elaborazioni esistenti per un comune (AJAX)
+    // ← era elaboraWeb, ora si chiama elabora
+    Route::post('/elabora', [BoosterController::class, 'elabora'])->name('elabora');
+    Route::get('/jobStatus', [BoosterController::class, 'jobStatus'])->name('jobStatus');
+
     Route::get('/elaborazioni/{code_comune}', [BoosterController::class, 'listaElaborazioni'])->name('elaborazioni');
-    
-    // Dettaglio elaborazione con paginazione (pagina HTML)
     Route::get('/dettaglio/{code_comune}/{table}', [BoosterController::class, 'dettaglioElaborazione'])->name('dettaglio');
-    
-    // Download CSV
     Route::get('/download/{code_comune}/{table}', [BoosterController::class, 'downloadElaborazione'])->name('download');
-    
-    // Elimina elaborazione (AJAX)
     Route::delete('/elimina/{code_comune}/{table}', [BoosterController::class, 'eliminaElaborazione'])->name('elimina');
-    
-    // Verifica errori catasto/urbanistica
+
+    // Errori geom — ora usati dal blade
     Route::get('/errori-catasto/{code_comune}', [BoosterController::class, 'erroriCatasto'])->name('errori.catasto');
     Route::get('/errori-urbanistica/{code_comune}', [BoosterController::class, 'erroriUrbanistica'])->name('errori.urbanistica');
+    Route::get('/errori-catasto-count/{code_comune}', [BoosterController::class, 'erroriCatastoNumber'])->name('errori.catasto.count');
+    Route::get('/errori-urbanistica-count/{code_comune}', [BoosterController::class, 'erroriUrbanisticaNumber'])->name('errori.urbanistica.count');
 });

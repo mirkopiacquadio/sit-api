@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\BoosterController;
+use Illuminate\Support\Facades\Cache;
 
 class AggiornaPropietariBooster implements ShouldQueue
 {
@@ -25,11 +26,19 @@ class AggiornaPropietariBooster implements ShouldQueue
 
     public function handle(): void
     {
+        $cacheKey = "job_status_{$this->finalTable}";
+
+        Cache::put($cacheKey, [
+            'status' => 'running',
+            'processed' => 0,
+            'total' => 0,
+            'started_at' => now()->toDateTimeString(),
+        ], 3600);
+
         Log::info("JOB START: table={$this->finalTable} comune={$this->code_comune}");
 
         $booster = new BoosterController();
 
-        // Chiama setDB tramite reflection perché è private
         $reflection = new \ReflectionMethod(BoosterController::class, 'setDB');
         $reflection->setAccessible(true);
         $reflection->invoke($booster, $this->code_comune);
@@ -37,12 +46,19 @@ class AggiornaPropietariBooster implements ShouldQueue
         DB::purge('pgsql2');
         DB::reconnect('pgsql2');
 
-        $totale = DB::table($this->finalTable)
+        $total = DB::table($this->finalTable)
             ->whereNull('proprietario')
             ->selectRaw('COUNT(DISTINCT ("FOGLIO", "PARTICELLA")) as cnt')
             ->value('cnt');
 
-        Log::info("JOB: totale particelle da processare = $totale");
+        Cache::put($cacheKey, [
+            'status' => 'running',
+            'processed' => 0,
+            'total' => $total,
+            'started_at' => now()->toDateTimeString(),
+        ], 3600);
+
+        Log::info("JOB: totale particelle da processare = $total");
 
         $processed = 0;
         do {
@@ -80,8 +96,7 @@ class AggiornaPropietariBooster implements ShouldQueue
                     }
                     $processed++;
                 } catch (\Throwable $e) {
-                    Log::error("JOB ERRORE particella {$record->FOGLIO}/{$record->PARTICELLA}: " . $e->getMessage());
-                    // Marca come processata per non bloccarsi in loop
+                    Log::error("JOB ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e->getMessage());
                     DB::table($this->finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
@@ -89,10 +104,32 @@ class AggiornaPropietariBooster implements ShouldQueue
                 }
             }
 
-            Log::info("JOB: processate $processed / $totale");
+            // Aggiorna stato in cache ogni chunk
+            Cache::put($cacheKey, [
+                'status'     => 'running',
+                'processed'  => $processed,
+                'total'      => $total,
+                'started_at' => now()->toDateTimeString(),
+            ], 3600);
 
+            Log::info("JOB: processate $processed / $total");
         } while (true);
 
-        Log::info("JOB COMPLETATO: table={$this->finalTable} totale processate=$processed");
+        Cache::put($cacheKey, [
+            'status'       => 'completed',
+            'processed'    => $processed,
+            'total'        => $total,
+            'completed_at' => now()->toDateTimeString(),
+        ], 3600);
+
+        Log::info("JOB COMPLETATO: table={$this->finalTable} totale=$processed");
+    }
+
+    public function failed(\Throwable $exception): void
+    {
+        Cache::put("job_status_{$this->finalTable}", [
+            'status' => 'error',
+            'error'  => $exception->getMessage(),
+        ], 3600);
     }
 }
