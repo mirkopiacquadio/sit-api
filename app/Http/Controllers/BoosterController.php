@@ -143,6 +143,78 @@ class BoosterController extends Controller
         return $this->estraiProprietariAttuali($result);
     }
 
+    public function elaboraWebChunk(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->code_comune);
+            $finalTable  = $request->table;
+            $offset      = (int) $request->input('offset', 0);
+            $chunkSize   = 50; // processa 50 particelle per chiamata
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $finalTable)) {
+                return response()->json(['error' => 'Nome tabella non valido'], 400);
+            }
+
+            $this->setDB($code_comune);
+
+            // Forza ricollegamento pgsql2
+            DB::purge('pgsql2');
+            DB::reconnect('pgsql2');
+
+            $records = DB::table($finalTable)
+                ->select('FOGLIO', 'PARTICELLA')
+                ->whereNull('proprietario') // processa solo quelle ancora null
+                ->distinct()
+                ->offset($offset)
+                ->limit($chunkSize)
+                ->get();
+
+            $processed = 0;
+            foreach ($records as $record) {
+                $owners = $this->getProprietariAttuali($code_comune, $record->FOGLIO, $record->PARTICELLA);
+
+                if (!empty($owners)) {
+                    $proprietarioStr = implode(' | ', array_map(
+                        fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
+                        $owners
+                    ));
+                    DB::table($finalTable)
+                        ->where('FOGLIO', $record->FOGLIO)
+                        ->where('PARTICELLA', $record->PARTICELLA)
+                        ->update(['proprietario' => $proprietarioStr]);
+                } else {
+                    // Metti un placeholder per non riprocessarla nei chunk successivi
+                    DB::table($finalTable)
+                        ->where('FOGLIO', $record->FOGLIO)
+                        ->where('PARTICELLA', $record->PARTICELLA)
+                        ->update(['proprietario' => '']);
+                }
+                $processed++;
+            }
+
+            // Conta quante sono ancora null (non ancora processate)
+            $remaining = DB::table($finalTable)
+                ->whereNull('proprietario')
+                ->distinct('FOGLIO', 'PARTICELLA')
+                ->count();
+
+            Log::info("BOOSTER CHUNK: offset=$offset processed=$processed remaining=$remaining");
+
+            return response()->json([
+                'success'   => true,
+                'processed' => $processed,
+                'remaining' => $remaining,
+                'done'      => $remaining === 0,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("BOOSTER CHUNK ERRORE: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     /**
      * Logica di estrazione proprietari attuali, separata e riusabile
      */
