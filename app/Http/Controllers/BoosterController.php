@@ -256,12 +256,12 @@ class BoosterController extends Controller
             $rows = DB::select("SELECT * FROM {$table}");
 
             if (count($rows) > 0) {
-                // Intestazioni — escludi geom, rinomina proprietario
-                $headers = array_keys((array)$rows[0]);
-                if (($k = array_search('geom', $headers)) !== false) {
-                    unset($headers[$k]);
-                }
-                fputcsv($handle, $headers, ';');
+                // Costruisci headers escludendo geom
+                $firstRow = (array)$rows[0];
+                unset($firstRow['geom']);
+                $headers = array_keys($firstRow);
+
+                fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
 
                 foreach ($rows as $row) {
                     $r = (array)$row;
@@ -269,16 +269,17 @@ class BoosterController extends Controller
 
                     $proprietario = $r['proprietario'] ?? '';
 
-                    // Se ci sono più proprietari separati da " | ", crea una riga per ciascuno
                     if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
                         $proprietari = explode(' | ', $proprietario);
                         foreach ($proprietari as $p) {
                             $newRow = $r;
                             $newRow['proprietario'] = trim($p);
-                            fputcsv($handle, $newRow, ';');
+                            $line = implode(';', array_map(fn($v) => '"' . str_replace('"', '""', $v ?? '') . '"', $newRow));
+                            fwrite($handle, $line . "\r\n");
                         }
                     } else {
-                        fputcsv($handle, $r);
+                        $line = implode(';', array_map(fn($v) => '"' . str_replace('"', '""', $v ?? '') . '"', $r));
+                        fwrite($handle, $line . "\r\n");
                     }
                 }
             }
