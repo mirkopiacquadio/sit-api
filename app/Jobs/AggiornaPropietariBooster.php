@@ -17,7 +17,7 @@ class AggiornaPropietariBooster implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 7200; // 2 ore massimo
-    public $tries = 1;
+    public $tries = 0;
 
     public function __construct(
         private string $finalTable,
