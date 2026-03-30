@@ -12,12 +12,13 @@ class CDUController extends Controller
 {
     private $elencoFg = array();
     private $nomiDb = array(
-        "9999" => 'morcone-webgis', //prova, per la versione development...
+        "9999" => 'morcone-webgis',
         "B946" => 'casavatore-webgis',
         "D230" => 'cusanomutri-webgis',
         "D469" => 'faicchio-webgis',
         "D784" => 'frasso_telesino-webgis',
         "F717" => 'morcone-webgis',
+        "I062" => 'sannicolamanfredi-webgis',
         "G848" => 'pontelandolfo-webgis',
         "L185" => 'toccocaudio-webgis',
         "H967" => 'sanlorenzomaggiore-webgis',
