@@ -353,12 +353,39 @@
                 document.getElementById('codeComune').value = comuneCode;
                 document.getElementById('erroriResult').style.display = 'none';
                 await loadElaborazioni(comuneCode);
+                await checkActiveJobs(comuneCode);
 
                 document.getElementById('loadingSpinner').classList.remove('active');
                 document.getElementById('mainContent').style.display = 'block';
             } catch (error) {
                 showMessage('Errore durante il caricamento dei dati', 'danger');
                 document.getElementById('loadingSpinner').classList.remove('active');
+            }
+        }
+
+        async function checkActiveJobs(comuneCode) {
+            try {
+                // Carica la lista elaborazioni e per ognuna controlla lo stato
+                const response = await fetch(`/api/monter/booster/elaborazioni/${comuneCode}`);
+                const elaborazioni = await response.json();
+
+                if (!elaborazioni || elaborazioni.length === 0) return;
+
+                // Controlla solo l'elaborazione più recente (prima della lista)
+                const latest = elaborazioni[0];
+                const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}`);
+                const status = await statusRes.json();
+
+                if (status.status === 'running') {
+                    const btn = document.getElementById('submitBtn');
+                    btn.disabled = true;
+                    const perc = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+                    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${status.processed}/${status.total} (${perc}%)`;
+                    // Riprendi il polling
+                    startJobPolling(latest, btn);
+                }
+            } catch (e) {
+                console.error('Errore check job attivo:', e);
             }
         }
 

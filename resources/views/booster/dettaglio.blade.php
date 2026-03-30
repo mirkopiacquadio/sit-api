@@ -122,7 +122,7 @@
                         Visualizzati {{ $rows->firstItem() }} - {{ $rows->lastItem() }} di {{ $rows->total() }} risultati
                     </div>
                     <div>
-                        {{ $rows->appends(['code_comune' => $code_comune])->links() }}
+                        {{ $rows->appends(['code_comune' => $code_comune])->links('pagination::bootstrap-5') }}
                     </div>
                 </div>
             </div>

@@ -535,7 +535,7 @@ class BoosterController extends Controller
             $this->setDB($code_comune);
             Log::info("BOOSTER STEP 2: setDB OK");
 
-            $data = now()->format('d_m_Y');
+            $data = now()->format('d_m_Y_H_i');
             $finalTable = "aree_edificabili_finali_{$data}";
 
             $tableExists = DB::select("SELECT to_regclass('{$finalTable}') IS NOT NULL as exists")[0]->exists;
@@ -635,7 +635,7 @@ class BoosterController extends Controller
     public function jobStatus(Request $request)
     {
         $table = $request->input('table');
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $table)) {
+        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
             return response()->json(['error' => 'Nome tabella non valido'], 400);
         }
 
