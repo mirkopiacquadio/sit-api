@@ -641,24 +641,13 @@ class BoosterController extends Controller
 
         $status = Cache::get("job_status_{$table}");
 
-        if ($status) {
-            return response()->json($status);
+        if (!$status) {
+            return response()->json(['status' => 'unknown']);
         }
 
-        // Cache scaduta: controlla se c'è ancora un job in coda per questa tabella
-        // (evita falsi positivi da null rows lasciate da job crashati)
-        $jobInQueue = DB::connection('info-generali')
-            ->table('jobs')
-            ->where('payload', 'like', '%' . $table . '%')
-            ->exists();
-
-        if ($jobInQueue) {
-            return response()->json(['status' => 'queued']);
-        }
-
-        return response()->json(['status' => 'unknown']);
+        return response()->json($status);
     }
-
+    
     // Metodo listaElaborazioni - ritorna JSON
     public function listaElaborazioni($code_comune)
     {
