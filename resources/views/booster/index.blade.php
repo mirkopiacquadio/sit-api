@@ -392,8 +392,8 @@
                 const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}&code_comune=${comuneCode}`);
                 const status = await statusRes.json();
 
-                if (status.status === 'running') {
-                    setJobRunningUI(latest, status.processed, status.total);
+                if (status.status === 'running' || status.status === 'queued') {
+                    setJobRunningUI(latest, status.processed ?? 0, status.total ?? 0);
                     // Riprendi il polling passando il comune attuale
                     startJobPolling(latest, document.getElementById('submitBtn'), comuneCode);
                 }
@@ -552,8 +552,8 @@
 
                     if (currentComune !== pollingComune) return;
 
-                    if (data.status === 'running') {
-                        setJobRunningUI(table, data.processed, data.total);
+                    if (data.status === 'running' || data.status === 'queued') {
+                        setJobRunningUI(table, data.processed ?? 0, data.total ?? 0);
                         setTimeout(poll, 3000);
                     } else if (data.status === 'completed') {
                         clearJobUI();
@@ -563,7 +563,8 @@
                         clearJobUI();
                         showMessage(`Errore nel job: ${data.error}`, 'danger');
                     } else {
-                        setTimeout(poll, 3000);
+                        // unknown: cache scaduta e nessun job in coda → ferma il polling
+                        clearJobUI();
                     }
                 } catch (e) {
                     if (currentComune === pollingComune) {

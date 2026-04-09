@@ -33,7 +33,7 @@ class AggiornaPropietariBooster implements ShouldQueue
             'processed' => 0,
             'total' => 0,
             'started_at' => now()->toDateTimeString(),
-        ], 3600);
+        ], 14400);
 
         Log::info("JOB START: table={$this->finalTable} comune={$this->code_comune}");
 
@@ -56,7 +56,7 @@ class AggiornaPropietariBooster implements ShouldQueue
             'processed' => 0,
             'total' => $total,
             'started_at' => now()->toDateTimeString(),
-        ], 3600);
+        ], 14400);
 
         Log::info("JOB: totale particelle da processare = $total");
 
@@ -110,7 +110,7 @@ class AggiornaPropietariBooster implements ShouldQueue
                 'processed'  => $processed,
                 'total'      => $total,
                 'started_at' => now()->toDateTimeString(),
-            ], 3600);
+            ], 14400);
 
             Log::info("JOB: processate $processed / $total");
         } while (true);
@@ -120,7 +120,7 @@ class AggiornaPropietariBooster implements ShouldQueue
             'processed'    => $processed,
             'total'        => $total,
             'completed_at' => now()->toDateTimeString(),
-        ], 3600);
+        ], 14400);
 
         Log::info("JOB COMPLETATO: table={$this->finalTable} totale=$processed");
     }
@@ -130,6 +130,6 @@ class AggiornaPropietariBooster implements ShouldQueue
         Cache::put("job_status_{$this->finalTable}", [
             'status' => 'error',
             'error'  => $exception->getMessage(),
-        ], 3600);
+        ], 14400);
     }
 }
