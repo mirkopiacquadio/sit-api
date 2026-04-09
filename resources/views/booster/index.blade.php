@@ -235,7 +235,7 @@
             <div id="messages"></div>
 
             {{-- Banner job in corso --}}
-            <div id="jobBanner" style="display:none;" class="alert alert-info d-flex align-items-center gap-3 mb-3 py-3 px-4 shadow-sm" role="alert">
+            <div id="jobBanner" class="alert alert-info d-none align-items-center gap-3 mb-3 py-3 px-4 shadow-sm" role="alert">
                 <span class="spinner-border spinner-border-sm flex-shrink-0" role="status"></span>
                 <div>
                     <strong>Elaborazione in corso</strong>
@@ -342,7 +342,9 @@
         });
 
         async function loadComuneData(comuneCode) {
-            document.getElementById('jobBanner').style.display = 'none';
+            const bannerReset = document.getElementById('jobBanner');
+            bannerReset.classList.add('d-none');
+            bannerReset.classList.remove('d-flex');
             document.getElementById('comuneWarning').style.display = 'none';
             document.getElementById('mainContent').style.display = 'none';
             document.getElementById('loadingSpinner').classList.add('active');
@@ -532,7 +534,8 @@
             btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${processed}/${total} (${perc}%)`;
 
             const banner = document.getElementById('jobBanner');
-            banner.style.display = 'flex';
+            banner.classList.remove('d-none');
+            banner.classList.add('d-flex');
             document.getElementById('jobBannerTable').textContent = formatTableLabel(table);
             document.getElementById('jobBannerText').textContent = `Proprietari elaborati: ${processed} / ${total} (${perc}%)`;
             document.getElementById('jobBannerBar').style.width = perc + '%';
@@ -542,7 +545,9 @@
             const btn = document.getElementById('submitBtn');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-gear me-2"></i>Avvia Elaborazione';
-            document.getElementById('jobBanner').style.display = 'none';
+            const banner = document.getElementById('jobBanner');
+            banner.classList.add('d-none');
+            banner.classList.remove('d-flex');
         }
 
         async function startJobPolling(table, btn, pollingComune) {
