@@ -389,7 +389,7 @@
 
                 // Controlla solo l'elaborazione più recente (prima della lista)
                 const latest = elaborazioni[0];
-                const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}`);
+                const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}&code_comune=${comuneCode}`);
                 const status = await statusRes.json();
 
                 if (status.status === 'running') {
@@ -547,7 +547,7 @@
                     return;
                 }
                 try {
-                    const res = await fetch(`/api/monter/booster/jobStatus?table=${table}`);
+                    const res = await fetch(`/api/monter/booster/jobStatus?table=${table}&code_comune=${pollingComune}`);
                     const data = await res.json();
 
                     if (currentComune !== pollingComune) return;

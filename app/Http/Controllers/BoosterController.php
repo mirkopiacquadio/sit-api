@@ -641,11 +641,41 @@ class BoosterController extends Controller
 
         $status = Cache::get("job_status_{$table}");
 
-        if (!$status) {
-            return response()->json(['status' => 'unknown']);
+        if ($status) {
+            return response()->json($status);
         }
 
-        return response()->json($status);
+        // Cache scaduta: interroga la tabella direttamente se è disponibile il comune
+        $code_comune = strtoupper($request->input('code_comune', ''));
+        if ($code_comune && preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+            try {
+                $this->setDB($code_comune);
+
+                $total = DB::table($table)->count();
+                $done  = DB::table($table)->whereNotNull('proprietario')->count();
+                $null  = $total - $done;
+
+                if ($null > 0) {
+                    return response()->json([
+                        'status'    => 'running',
+                        'processed' => $done,
+                        'total'     => $total,
+                        'note'      => 'cache_expired_fallback',
+                    ]);
+                } else {
+                    return response()->json([
+                        'status'    => 'completed',
+                        'processed' => $done,
+                        'total'     => $total,
+                        'note'      => 'cache_expired_fallback',
+                    ]);
+                }
+            } catch (\Throwable) {
+                // tabella non esiste o errore connessione → unknown
+            }
+        }
+
+        return response()->json(['status' => 'unknown']);
     }
 
     // Metodo listaElaborazioni - ritorna JSON
