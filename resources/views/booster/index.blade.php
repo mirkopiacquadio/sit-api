@@ -381,8 +381,8 @@
                     btn.disabled = true;
                     const perc = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
                     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${status.processed}/${status.total} (${perc}%)`;
-                    // Riprendi il polling
-                    startJobPolling(latest, btn);
+                    // Riprendi il polling passando il comune attuale
+                    startJobPolling(latest, btn, comuneCode);
                 }
             } catch (e) {
                 console.error('Errore check job attivo:', e);
@@ -405,6 +405,15 @@
             });
         }
 
+        function formatTableLabel(tabella) {
+            const raw = tabella.replace('aree_edificabili_finali_', '');
+            const parts = raw.split('_');
+            if (parts.length >= 5) {
+                return `${parts[0]}/${parts[1]}/${parts[2]} ore ${parts[3]}:${parts[4]}`;
+            }
+            return `${parts[0]}/${parts[1]}/${parts[2]}`;
+        }
+
         async function loadElaborazioni(comuneCode) {
             try {
                 const response = await fetch(`/api/monter/booster/elaborazioni/${comuneCode}`);
@@ -421,7 +430,7 @@
                 container.innerHTML = '<div class="elaborazioni-list"></div>';
                 const list = container.querySelector('.elaborazioni-list');
                 elaborazioni.forEach(tabella => {
-                    const dataVisuale = tabella.replace('aree_edificabili_finali_', '').replace(/_/g, '/');
+                    const dataVisuale = formatTableLabel(tabella);
                     const item = document.createElement('div');
                     item.className = 'elaborazione-item';
                     item.innerHTML = `
@@ -489,7 +498,7 @@
 
                 showMessage('Tabella creata. Popolamento proprietari in corso...', 'info');
                 await loadElaborazioni(currentComune);
-                startJobPolling(result.table, btn);
+                startJobPolling(result.table, btn, currentComune);
 
             } catch (error) {
                 showMessage('Errore durante l\'elaborazione', 'danger');
@@ -498,11 +507,17 @@
             }
         });
 
-        async function startJobPolling(table, btn) {
+        async function startJobPolling(table, btn, pollingComune) {
             const poll = async () => {
+                // Se il comune è cambiato nel frattempo, abbandona il polling
+                if (currentComune !== pollingComune) {
+                    return;
+                }
                 try {
                     const res = await fetch(`/api/monter/booster/jobStatus?table=${table}`);
                     const data = await res.json();
+
+                    if (currentComune !== pollingComune) return;
 
                     if (data.status === 'running') {
                         const perc = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
@@ -521,7 +536,9 @@
                         setTimeout(poll, 3000);
                     }
                 } catch (e) {
-                    setTimeout(poll, 5000);
+                    if (currentComune === pollingComune) {
+                        setTimeout(poll, 5000);
+                    }
                 }
             };
             setTimeout(poll, 2000);
