@@ -381,22 +381,20 @@
 
         async function checkActiveJobs(comuneCode) {
             try {
-                // Carica la lista elaborazioni e per ognuna controlla lo stato
                 const response = await fetch(`/api/monter/booster/elaborazioni/${comuneCode}`);
                 const elaborazioni = await response.json();
-
                 if (!elaborazioni || elaborazioni.length === 0) return;
 
-                // Controlla solo l'elaborazione più recente (prima della lista)
                 const latest = elaborazioni[0];
-                const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}&code_comune=${comuneCode}`);
+                const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}`);
                 const status = await statusRes.json();
 
-                if (status.status === 'running' || status.status === 'queued') {
+                // Solo se veramente in corso — NON su unknown
+                if (status.status === 'running') {
                     setJobRunningUI(latest, status.processed ?? 0, status.total ?? 0);
-                    // Riprendi il polling passando il comune attuale
                     startJobPolling(latest, document.getElementById('submitBtn'), comuneCode);
                 }
+                // queued e unknown → non fare nulla, il job è già finito
             } catch (e) {
                 console.error('Errore check job attivo:', e);
             }
