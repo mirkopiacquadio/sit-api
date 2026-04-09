@@ -342,10 +342,10 @@
         });
 
         async function loadComuneData(comuneCode) {
+            document.getElementById('jobBanner').style.display = 'none';
             document.getElementById('comuneWarning').style.display = 'none';
             document.getElementById('mainContent').style.display = 'none';
             document.getElementById('loadingSpinner').classList.add('active');
-            document.getElementById('jobBanner').style.display = 'none';
 
             try {
                 const response = await fetch('/api/monter/booster/zto', {
