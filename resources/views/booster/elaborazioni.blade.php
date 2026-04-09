@@ -48,8 +48,13 @@
                             <div class="list-group list-group-flush">
                                 @foreach($elaborazioni as $tabella)
                                     @php
-                                        $dataVisuale = str_replace('aree_edificabili_finali_', '', $tabella);
-                                        $dataVisuale = str_replace('_', '/', $dataVisuale);
+                                        $raw = str_replace('aree_edificabili_finali_', '', $tabella);
+                                        $parts = explode('_', $raw);
+                                        if (count($parts) >= 5) {
+                                            $dataVisuale = "{$parts[0]}/{$parts[1]}/{$parts[2]} ore {$parts[3]}:{$parts[4]}";
+                                        } else {
+                                            $dataVisuale = "{$parts[0]}/{$parts[1]}/{$parts[2]}";
+                                        }
                                     @endphp
                                     <div class="list-group-item d-flex justify-content-between align-items-center py-3">
                                         <div>

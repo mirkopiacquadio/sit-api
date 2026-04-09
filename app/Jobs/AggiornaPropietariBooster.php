@@ -122,10 +122,6 @@ class AggiornaPropietariBooster implements ShouldQueue
             'completed_at' => now()->toDateTimeString(),
         ], 3600);
 
-        DB::purge('info-generali');
-        config(['database.connections.info-generali.database' => 'info-generali']);
-        DB::reconnect('info-generali');
-    
         Log::info("JOB COMPLETATO: table={$this->finalTable} totale=$processed");
     }
 

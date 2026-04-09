@@ -246,7 +246,7 @@ class BoosterController extends Controller
 
         $this->setDB($code_comune);
 
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
+        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
             return response()->json(['error' => 'Nome tabella non valido'], 400);
         }
 
@@ -310,7 +310,7 @@ class BoosterController extends Controller
 
             $this->setDB($code_comune);
 
-            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $table)) {
+            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
                 return response()->json(['error' => 'Nome tabella non valido'], 400);
             }
 
@@ -683,7 +683,7 @@ class BoosterController extends Controller
                 return redirect()->back()->with('error', 'Codice comune non valido');
             }
 
-            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}$/', $table)) {
+            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
                 return redirect()->back()->with('error', 'Nome tabella non valido');
             }
 
