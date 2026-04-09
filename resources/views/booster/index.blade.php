@@ -383,17 +383,23 @@
             try {
                 const response = await fetch(`/api/monter/booster/elaborazioni/${comuneCode}`);
                 const elaborazioni = await response.json();
-                if (!elaborazioni || elaborazioni.length === 0) return;
+                if (!elaborazioni || elaborazioni.length === 0) {
+                    clearJobUI();
+                    return;
+                }
 
                 const latest = elaborazioni[0];
+                console.log('CHECK JOB: tabella più recente =', latest);
+
                 const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}`);
                 const status = await statusRes.json();
+                console.log('CHECK JOB: status =', status.status);
 
                 if (status.status === 'running') {
                     setJobRunningUI(latest, status.processed ?? 0, status.total ?? 0);
                     startJobPolling(latest, document.getElementById('submitBtn'), comuneCode);
                 } else {
-                    clearJobUI(); // ← forza la pulizia del banner in ogni altro caso
+                    clearJobUI();
                 }
             } catch (e) {
                 clearJobUI();
