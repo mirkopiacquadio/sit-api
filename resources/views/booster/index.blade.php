@@ -234,6 +234,21 @@
         <div id="mainContent" style="display: none;">
             <div id="messages"></div>
 
+            {{-- Banner job in corso --}}
+            <div id="jobBanner" style="display:none;" class="alert alert-info d-flex align-items-center gap-3 mb-3 py-3 px-4 shadow-sm" role="alert">
+                <span class="spinner-border spinner-border-sm flex-shrink-0" role="status"></span>
+                <div>
+                    <strong>Elaborazione in corso</strong>
+                    <span id="jobBannerTable" class="ms-2 text-muted" style="font-size:0.85rem;"></span>
+                    <div class="mt-1">
+                        <span id="jobBannerText">Avvio in corso...</span>
+                        <div class="progress mt-1" style="height:6px;min-width:200px;">
+                            <div id="jobBannerBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- Pannello verifica errori geometrie --}}
             <div class="errori-panel" id="erroriPanel">
                 <div class="d-flex justify-content-between align-items-center">
@@ -330,6 +345,7 @@
             document.getElementById('comuneWarning').style.display = 'none';
             document.getElementById('mainContent').style.display = 'none';
             document.getElementById('loadingSpinner').classList.add('active');
+            document.getElementById('jobBanner').style.display = 'none';
 
             try {
                 const response = await fetch('/api/monter/booster/zto', {
@@ -377,12 +393,9 @@
                 const status = await statusRes.json();
 
                 if (status.status === 'running') {
-                    const btn = document.getElementById('submitBtn');
-                    btn.disabled = true;
-                    const perc = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
-                    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${status.processed}/${status.total} (${perc}%)`;
+                    setJobRunningUI(latest, status.processed, status.total);
                     // Riprendi il polling passando il comune attuale
-                    startJobPolling(latest, btn, comuneCode);
+                    startJobPolling(latest, document.getElementById('submitBtn'), comuneCode);
                 }
             } catch (e) {
                 console.error('Errore check job attivo:', e);
@@ -507,6 +520,26 @@
             }
         });
 
+        function setJobRunningUI(table, processed, total) {
+            const btn = document.getElementById('submitBtn');
+            const perc = total > 0 ? Math.round((processed / total) * 100) : 0;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${processed}/${total} (${perc}%)`;
+
+            const banner = document.getElementById('jobBanner');
+            banner.style.display = 'flex';
+            document.getElementById('jobBannerTable').textContent = formatTableLabel(table);
+            document.getElementById('jobBannerText').textContent = `Proprietari elaborati: ${processed} / ${total} (${perc}%)`;
+            document.getElementById('jobBannerBar').style.width = perc + '%';
+        }
+
+        function clearJobUI() {
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-gear me-2"></i>Avvia Elaborazione';
+            document.getElementById('jobBanner').style.display = 'none';
+        }
+
         async function startJobPolling(table, btn, pollingComune) {
             const poll = async () => {
                 // Se il comune è cambiato nel frattempo, abbandona il polling
@@ -520,18 +553,15 @@
                     if (currentComune !== pollingComune) return;
 
                     if (data.status === 'running') {
-                        const perc = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
-                        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Proprietari: ${data.processed}/${data.total} (${perc}%)`;
+                        setJobRunningUI(table, data.processed, data.total);
                         setTimeout(poll, 3000);
                     } else if (data.status === 'completed') {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-gear me-2"></i>Avvia Elaborazione';
-                        showMessage(`✅ Completato! ${data.processed} particelle elaborate.`, 'success');
+                        clearJobUI();
+                        showMessage(`Completato! ${data.processed} particelle elaborate.`, 'success');
                         await loadElaborazioni(currentComune);
                     } else if (data.status === 'error') {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-gear me-2"></i>Avvia Elaborazione';
-                        showMessage(`❌ Errore nel job: ${data.error}`, 'danger');
+                        clearJobUI();
+                        showMessage(`Errore nel job: ${data.error}`, 'danger');
                     } else {
                         setTimeout(poll, 3000);
                     }
