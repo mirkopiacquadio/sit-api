@@ -389,13 +389,14 @@
                 const statusRes = await fetch(`/api/monter/booster/jobStatus?table=${latest}`);
                 const status = await statusRes.json();
 
-                // Solo se veramente in corso — NON su unknown
                 if (status.status === 'running') {
                     setJobRunningUI(latest, status.processed ?? 0, status.total ?? 0);
                     startJobPolling(latest, document.getElementById('submitBtn'), comuneCode);
+                } else {
+                    clearJobUI(); // ← forza la pulizia del banner in ogni altro caso
                 }
-                // queued e unknown → non fare nulla, il job è già finito
             } catch (e) {
+                clearJobUI();
                 console.error('Errore check job attivo:', e);
             }
         }
@@ -550,18 +551,11 @@
 
                     if (currentComune !== pollingComune) return;
 
-                    if (data.status === 'running' || data.status === 'queued') {
+                    if (data.status === 'running') { // ← solo running, basta
                         setJobRunningUI(table, data.processed ?? 0, data.total ?? 0);
                         setTimeout(poll, 3000);
-                    } else if (data.status === 'completed') {
-                        clearJobUI();
-                        showMessage(`Completato! ${data.processed} particelle elaborate.`, 'success');
-                        await loadElaborazioni(currentComune);
-                    } else if (data.status === 'error') {
-                        clearJobUI();
-                        showMessage(`Errore nel job: ${data.error}`, 'danger');
                     } else {
-                        // unknown: cache scaduta e nessun job in coda → ferma il polling
+                        // tutto il resto compreso unknown e queued → ferma e pulisci
                         clearJobUI();
                     }
                 } catch (e) {
