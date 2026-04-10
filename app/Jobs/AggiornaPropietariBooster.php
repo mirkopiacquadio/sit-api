@@ -107,22 +107,32 @@ class AggiornaPropietariBooster implements ShouldQueue
                         ))
                         : '';
 
-                    // 4. Proprietari per ogni sub (fabbricati)
+                    // 4. Proprietari per ogni sub (terreni + fabbricati)
+                    // Unifica i sub da entrambe le liste, evitando duplicati per stesso sub
                     $subData = [];
-                    foreach ($fabbricati as $fab) {
-                        if (empty($fab->sub)) continue;
+                    $processedSubs = [];
+
+                    $allSubRecords = array_merge(
+                        array_map(fn($t) => (object)['sub' => $t->sub, 'tipo' => 'Terreno', 'catqua' => $t->catqua ?? ''], $terreni),
+                        array_map(fn($f) => (object)['sub' => $f->sub, 'tipo' => 'Fabbricato', 'catqua' => $f->catqua ?? ''], $fabbricati)
+                    );
+
+                    foreach ($allSubRecords as $item) {
+                        $sub = $item->sub ?? '';
+                        if (empty($sub) || isset($processedSubs[$sub])) continue;
+                        $processedSubs[$sub] = true;
 
                         $subOwners = $booster->getProprietariAttuali(
                             $this->code_comune,
                             $record->FOGLIO,
                             $record->PARTICELLA,
-                            $fab->sub
+                            $sub
                         );
 
                         $subData[] = [
-                            'sub'          => $fab->sub,
-                            'tipo'         => 'Fabbricato',
-                            'catqua'       => $fab->catqua ?? '',
+                            'sub'          => $sub,
+                            'tipo'         => $item->tipo,
+                            'catqua'       => $item->catqua,
                             'proprietario' => !empty($subOwners)
                                 ? implode(' | ', array_map(
                                     fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']}",
