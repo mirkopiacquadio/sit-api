@@ -26,8 +26,11 @@
                     <div>
                         <h2>📊 Dettaglio Elaborazione</h2>
                         @php
-                            $dataVisuale = str_replace('aree_edificabili_finali_', '', $table);
-                            $dataVisuale = str_replace('_', '/', $dataVisuale);
+                            $raw = str_replace('aree_edificabili_finali_', '', $table);
+                            $parts = explode('_', $raw);
+                            $dataVisuale = count($parts) >= 5
+                                ? "{$parts[0]}/{$parts[1]}/{$parts[2]} ore {$parts[3]}:{$parts[4]}"
+                                : "{$parts[0]}/{$parts[1]}/{$parts[2]}";
                         @endphp
                         <p class="text-muted mb-0">Tabella: <strong>{{ $dataVisuale }}</strong></p>
                     </div>
@@ -74,18 +77,21 @@
                             <th>ZTO</th>
                             <th>FOGLIO</th>
                             <th>PARTICELLA</th>
+                            <th>TIPO CATASTO</th>
                             <th>STATO</th>
                             <th class="text-end">SUPERFICIE (m²)</th>
-                            <th>PROPRIETARIO</th>
+                            <th>PROPRIETARI / SUB</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($rows as $row)
+                            @php $subData = json_decode($row->sub_data ?? '[]', true) ?: []; @endphp
                             <tr>
                                 <td>{{ $row->LAYER }}</td>
                                 <td><span class="badge bg-info badge-custom">{{ $row->STRING }}</span></td>
                                 <td><strong>{{ $row->FOGLIO }}</strong></td>
                                 <td><strong>{{ $row->PARTICELLA }}</strong></td>
+                                <td><span class="badge bg-secondary badge-custom">{{ $row->catasto_tipo ?? '—' }}</span></td>
                                 <td>
                                     @if($row->STATO == 'LIBERA')
                                         <span class="badge bg-success badge-custom">{{ $row->STATO }}</span>
@@ -96,17 +102,30 @@
                                     @endif
                                 </td>
                                 <td class="text-end">{{ number_format($row->aisect, 2, ',', '.') }}</td>
-                                <td>
+                                <td style="max-width:380px;">
+                                    {{-- Proprietari particella principale --}}
                                     @if($row->proprietario)
-                                        <small>{{ Str::limit($row->proprietario, 60) }}</small>
+                                        <div class="mb-1"><small>{{ $row->proprietario }}</small></div>
                                     @else
-                                        <span class="text-muted fst-italic">Non disponibile</span>
+                                        <div class="mb-1 text-muted fst-italic"><small>Non disponibile</small></div>
                                     @endif
+                                    {{-- Sub (fabbricati) --}}
+                                    @foreach($subData as $sub)
+                                        <div class="mt-1 ps-2 border-start border-2 border-primary">
+                                            <span class="badge bg-primary" style="font-size:0.7rem;">
+                                                Sub {{ $sub['sub'] }}
+                                                @if(!empty($sub['catqua'])) · {{ $sub['catqua'] }}@endif
+                                            </span>
+                                            <small class="d-block text-muted mt-1">
+                                                {{ $sub['proprietario'] ?: 'Proprietario non disponibile' }}
+                                            </small>
+                                        </div>
+                                    @endforeach
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-5">
+                                <td colspan="8" class="text-center text-muted py-5">
                                     <em>Nessun dato disponibile</em>
                                 </td>
                             </tr>
@@ -119,7 +138,7 @@
             <div class="p-3 border-top">
                 <div class="d-flex justify-content-between align-items-center">
                     <div class="text-muted">
-                        Visualizzati {{ $rows->firstItem() }} - {{ $rows->lastItem() }} di {{ $rows->total() }} risultati
+                        Visualizzati {{ $rows->firstItem() }} - {{ $rows->lastItem() }} di {{ $rows->total() }} righe
                     </div>
                     <div>
                         {{ $rows->appends(['code_comune' => $code_comune])->links('pagination::bootstrap-5') }}

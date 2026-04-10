@@ -86,6 +86,61 @@ class CatastoImmobileController extends Controller
         return response()->json($arr);
     }
 
+    /**
+     * Versione interna di selectFgPllaSubCatasto, richiamabile direttamente dal job.
+     * Restituisce [terreni[], fabbricati[]] per foglio/particella del comune dato.
+     */
+    public function getSubInfo(string $comune, string $foglio, string $particella): array
+    {
+        $comune = strtoupper($comune);
+        $n5     = \AppHelper::formatNumber($particella, 5);
+        $f4     = \AppHelper::formatNumber($foglio, 4);
+
+        // Terreni (foglio NON formattato, numero formattato a 5)
+        $sqlTer = "SELECT DISTINCT ON (P.foglio, P.numero, P.sub)
+            P.id, P.foglio,
+            regexp_replace(P.numero, '0*', '') AS numero,
+            regexp_replace(P.sub, '0*', '') AS sub,
+            'terreno' AS tipologia,
+            PCQ.descrizione AS catqua
+            FROM (
+                SELECT L1.* FROM c_terr_info AS L1
+                INNER JOIN (
+                    SELECT id_immobile, MAX(id) AS max_id
+                    FROM c_terr_info
+                    WHERE cod_com='{$comune}' AND foglio='{$foglio}' AND numero='{$n5}'
+                    GROUP BY id_immobile
+                ) AS L2 ON L1.id = L2.max_id AND L1.id_immobile = L2.id_immobile
+            ) AS P
+            LEFT JOIN c_predefinito_codice_qualita AS PCQ ON P.qualita::smallint = PCQ.codice
+            ORDER BY P.foglio, P.numero, P.sub";
+
+        $terreni = DB::connection('pgsql2')->select($sqlTer);
+
+        // Fabbricati (foglio formattato a 4, numero formattato a 5)
+        $sqlFab = "SELECT DISTINCT ON(IDN.foglio, IDN.numero, IDN.sub)
+            IDN.id_fabb_info AS id,
+            regexp_replace(IDN.foglio, '0*', '') AS foglio,
+            regexp_replace(IDN.numero, '0*', '') AS numero,
+            regexp_replace(IDN.sub, '0*', '') AS sub,
+            'fabbricato' AS tipologia,
+            cat AS catqua
+            FROM c_fabb_info AS L1
+            INNER JOIN (
+                SELECT id_immobile, MAX(id) AS max_id
+                FROM c_fabb_info
+                WHERE cod_com='{$comune}'
+                GROUP BY id_immobile
+            ) AS L2 ON L1.id = L2.max_id AND L1.id_immobile = L1.id_immobile
+            JOIN c_fabb_identificativi AS IDN ON IDN.id_fabb_info = L1.id
+            WHERE IDN.foglio='{$f4}' AND IDN.numero='{$n5}'
+            ORDER BY IDN.foglio, IDN.numero, IDN.sub";
+
+        $fabbricati = DB::connection('pgsql2')->select($sqlFab);
+
+        return [$terreni, $fabbricati];
+    }
+
     function elencoMutazioniCatastoTerreni(Request $request, $bool_print = false)
     {
         $comune = strtoupper($request->code_comune);

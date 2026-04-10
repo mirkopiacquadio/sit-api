@@ -254,33 +254,58 @@ class BoosterController extends Controller
             $fileName = "{$table}.csv";
             $handle = fopen('php://temp', 'w+');
 
-            $rows = DB::select("SELECT * FROM {$table}");
+            $rows = DB::select("SELECT * FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
             if (count($rows) > 0) {
-                // Costruisci headers escludendo geom
+                // Costruisci headers: escludi geom e sub_data, aggiungi sub alla fine
                 $firstRow = (array)$rows[0];
-                unset($firstRow['geom']);
-                $headers = array_keys($firstRow);
+                unset($firstRow['geom'], $firstRow['sub_data']);
+                $mainHeaders = array_keys($firstRow);
+                $headers = array_merge($mainHeaders, ['sub']);
 
                 fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
+
+                $writeCsvLine = function (array $values) use ($handle, $headers) {
+                    $ordered = [];
+                    foreach ($headers as $h) {
+                        $ordered[] = '"' . str_replace('"', '""', $values[$h] ?? '') . '"';
+                    }
+                    fwrite($handle, implode(';', $ordered) . "\r\n");
+                };
 
                 foreach ($rows as $row) {
                     $r = (array)$row;
                     unset($r['geom']);
+                    $subData = json_decode($r['sub_data'] ?? '[]', true) ?: [];
+                    unset($r['sub_data']);
+                    $r['sub'] = ''; // colonna sub vuota per riga principale
 
+                    // Riga(he) principale — split proprietari multipli
                     $proprietario = $r['proprietario'] ?? '';
-
                     if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
-                        $proprietari = explode(' | ', $proprietario);
-                        foreach ($proprietari as $p) {
-                            $newRow = $r;
-                            $newRow['proprietario'] = trim($p);
-                            $line = implode(';', array_map(fn($v) => '"' . str_replace('"', '""', $v ?? '') . '"', $newRow));
-                            fwrite($handle, $line . "\r\n");
+                        foreach (explode(' | ', $proprietario) as $p) {
+                            $writeCsvLine(array_merge($r, ['proprietario' => trim($p)]));
                         }
                     } else {
-                        $line = implode(';', array_map(fn($v) => '"' . str_replace('"', '""', $v ?? '') . '"', $r));
-                        fwrite($handle, $line . "\r\n");
+                        $writeCsvLine($r);
+                    }
+
+                    // Righe sub — solo FOGLIO, PARTICELLA, sub, proprietario, catasto_tipo
+                    foreach ($subData as $sub) {
+                        $subRow = array_fill_keys($headers, '');
+                        $subRow['FOGLIO']      = $r['FOGLIO'];
+                        $subRow['PARTICELLA']  = $r['PARTICELLA'];
+                        $subRow['sub']         = $sub['sub'] ?? '';
+                        $subRow['catasto_tipo'] = $sub['tipo'] ?? 'Fabbricato';
+                        $subProp = $sub['proprietario'] ?? '';
+                        if (!empty($subProp) && str_contains($subProp, ' | ')) {
+                            foreach (explode(' | ', $subProp) as $p) {
+                                $writeCsvLine(array_merge($subRow, ['proprietario' => trim($p)]));
+                            }
+                        } else {
+                            $subRow['proprietario'] = $subProp;
+                            $writeCsvLine($subRow);
+                        }
                     }
                 }
             }
@@ -611,6 +636,8 @@ class BoosterController extends Controller
             Log::info("BOOSTER STEP 9: CREATE finalTable OK");
 
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN catasto_tipo TEXT");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
             Log::info("BOOSTER STEP 10: ALTER TABLE OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
@@ -689,7 +716,9 @@ class BoosterController extends Controller
 
             $this->setDB($code_comune);
 
-            $rows = DB::table($table)->paginate(50);
+            $rows = DB::table($table)
+                ->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"')
+                ->paginate(50);
 
             return view('booster.dettaglio', compact('rows', 'code_comune', 'table'));
         } catch (\Exception $e) {
@@ -711,7 +740,7 @@ class BoosterController extends Controller
 
         $this->setDB($code_comune);
 
-        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", aisect, proprietario FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\"");
+        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
         return response()->json($rows);
     }

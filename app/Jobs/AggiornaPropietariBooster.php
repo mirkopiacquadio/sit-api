@@ -10,6 +10,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\BoosterController;
+use App\Http\Controllers\CatastoImmobileController;
 use Illuminate\Support\Facades\Cache;
 
 class AggiornaPropietariBooster implements ShouldQueue
@@ -71,40 +72,86 @@ class AggiornaPropietariBooster implements ShouldQueue
 
             if ($records->isEmpty()) break;
 
+            $catastoController = new CatastoImmobileController();
+
             foreach ($records as $record) {
                 try {
-                    $owners = $booster->getProprietariAttuali(
+                    // 1. Recupera info catasto (terreni + fabbricati con sub)
+                    [$terreni, $fabbricati] = $catastoController->getSubInfo(
                         $this->code_comune,
                         $record->FOGLIO,
                         $record->PARTICELLA
                     );
 
-                    if (!empty($owners)) {
-                        $proprietarioStr = implode(' | ', array_map(
+                    // 2. Determina catasto_tipo dalla qualità del terreno
+                    $catasto_tipo = 'Terreno';
+                    if (!empty($terreni)) {
+                        $catqua = strtolower(trim($terreni[0]->catqua ?? ''));
+                        if ($catqua !== '') {
+                            $catasto_tipo = ucwords($catqua);
+                        }
+                    } elseif (!empty($fabbricati)) {
+                        $catasto_tipo = 'Fabbricato';
+                    }
+
+                    // 3. Proprietari della particella principale (sub = '')
+                    $owners = $booster->getProprietariAttuali(
+                        $this->code_comune,
+                        $record->FOGLIO,
+                        $record->PARTICELLA
+                    );
+                    $proprietarioStr = !empty($owners)
+                        ? implode(' | ', array_map(
                             fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
                             $owners
-                        ));
-                        DB::table($this->finalTable)
-                            ->where('FOGLIO', $record->FOGLIO)
-                            ->where('PARTICELLA', $record->PARTICELLA)
-                            ->update(['proprietario' => $proprietarioStr]);
-                    } else {
-                        DB::table($this->finalTable)
-                            ->where('FOGLIO', $record->FOGLIO)
-                            ->where('PARTICELLA', $record->PARTICELLA)
-                            ->update(['proprietario' => '']);
+                        ))
+                        : '';
+
+                    // 4. Proprietari per ogni sub (fabbricati)
+                    $subData = [];
+                    foreach ($fabbricati as $fab) {
+                        if (empty($fab->sub)) continue;
+
+                        $subOwners = $booster->getProprietariAttuali(
+                            $this->code_comune,
+                            $record->FOGLIO,
+                            $record->PARTICELLA,
+                            $fab->sub
+                        );
+
+                        $subData[] = [
+                            'sub'          => $fab->sub,
+                            'tipo'         => 'Fabbricato',
+                            'catqua'       => $fab->catqua ?? '',
+                            'proprietario' => !empty($subOwners)
+                                ? implode(' | ', array_map(
+                                    fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']}",
+                                    $subOwners
+                                ))
+                                : '',
+                        ];
                     }
+
+                    // 5. Aggiorna la riga principale
+                    DB::table($this->finalTable)
+                        ->where('FOGLIO', $record->FOGLIO)
+                        ->where('PARTICELLA', $record->PARTICELLA)
+                        ->update([
+                            'proprietario' => $proprietarioStr,
+                            'catasto_tipo'  => $catasto_tipo,
+                            'sub_data'      => !empty($subData) ? json_encode($subData, JSON_UNESCAPED_UNICODE) : null,
+                        ]);
+
                     $processed++;
                 } catch (\Throwable $e) {
                     Log::error("JOB ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e->getMessage());
                     DB::table($this->finalTable)
                         ->where('FOGLIO', $record->FOGLIO)
                         ->where('PARTICELLA', $record->PARTICELLA)
-                        ->update(['proprietario' => 'ERRORE']);
+                        ->update(['proprietario' => 'ERRORE', 'catasto_tipo' => 'ERRORE']);
                 }
             }
 
-            // Aggiorna stato in cache ogni chunk
             Cache::put($cacheKey, [
                 'status'     => 'running',
                 'processed'  => $processed,
