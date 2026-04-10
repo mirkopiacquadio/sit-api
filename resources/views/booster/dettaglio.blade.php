@@ -105,20 +105,30 @@
                                 <td style="max-width:380px;">
                                     {{-- Proprietari particella principale --}}
                                     @if($row->proprietario)
-                                        <div class="mb-1"><small>{{ $row->proprietario }}</small></div>
+                                        <ul class="mb-1 ps-3" style="font-size:0.8rem;">
+                                            @foreach(explode(' | ', $row->proprietario) as $prop)
+                                                <li>{{ trim($prop) }}</li>
+                                            @endforeach
+                                        </ul>
                                     @else
                                         <div class="mb-1 text-muted fst-italic"><small>Non disponibile</small></div>
                                     @endif
-                                    {{-- Sub (fabbricati) --}}
+                                    {{-- Sub (terreni/fabbricati) --}}
                                     @foreach($subData as $sub)
-                                        <div class="mt-1 ps-2 border-start border-2 border-primary">
+                                        <div class="mt-2 ps-2 border-start border-2 border-primary">
                                             <span class="badge bg-primary" style="font-size:0.7rem;">
-                                                Sub {{ $sub['sub'] }}
+                                                Sub {{ $sub['sub'] }} · {{ $sub['tipo'] }}
                                                 @if(!empty($sub['catqua'])) · {{ $sub['catqua'] }}@endif
                                             </span>
-                                            <small class="d-block text-muted mt-1">
-                                                {{ $sub['proprietario'] ?: 'Proprietario non disponibile' }}
-                                            </small>
+                                            @if(!empty($sub['proprietario']))
+                                                <ul class="mb-0 mt-1 ps-3" style="font-size:0.8rem;">
+                                                    @foreach(explode(' | ', $sub['proprietario']) as $prop)
+                                                        <li>{{ trim($prop) }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            @else
+                                                <small class="d-block text-muted mt-1 fst-italic">Non disponibile</small>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </td>
