@@ -185,6 +185,14 @@ class AggiornaPropietariBooster implements ShouldQueue
             'completed_at' => now()->toDateTimeString(),
         ], 14400);
 
+        // Ripristina ENTRAMBE le connessioni all'originale.
+        // setDB() cambia 'pgsql' al db del comune — ma Laravel usa 'pgsql' per la
+        // tabella jobs. Se non ripristinato, deleteReserved() va su un db sbagliato
+        // e crasha con "beginTransaction() on null", lasciando il job in coda per sempre.
+        DB::purge('pgsql');
+        config(['database.connections.pgsql.database' => 'info-generali']);
+        DB::reconnect('pgsql');
+
         DB::purge('info-generali');
         config(['database.connections.info-generali.database' => 'info-generali']);
         DB::reconnect('info-generali');
@@ -194,6 +202,13 @@ class AggiornaPropietariBooster implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
+        // Ripristina pgsql prima di qualsiasi operazione Laravel post-failure
+        try {
+            DB::purge('pgsql');
+            config(['database.connections.pgsql.database' => 'info-generali']);
+            DB::reconnect('pgsql');
+        } catch (\Throwable) {}
+
         Cache::put("job_status_{$this->finalTable}", [
             'status' => 'error',
             'error'  => $exception->getMessage(),
