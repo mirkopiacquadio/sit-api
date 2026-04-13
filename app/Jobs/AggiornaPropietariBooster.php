@@ -18,7 +18,7 @@ class AggiornaPropietariBooster implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 7200; // 2 ore massimo
-    public $tries = 0;
+    public $tries = 1; // Un solo tentativo: se crasha non si rimette in coda
 
     public function __construct(
         private string $finalTable,
@@ -155,10 +155,14 @@ class AggiornaPropietariBooster implements ShouldQueue
                     $processed++;
                 } catch (\Throwable $e) {
                     Log::error("JOB ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e->getMessage());
-                    DB::table($this->finalTable)
-                        ->where('FOGLIO', $record->FOGLIO)
-                        ->where('PARTICELLA', $record->PARTICELLA)
-                        ->update(['proprietario' => 'ERRORE', 'catasto_tipo' => 'ERRORE']);
+                    try {
+                        DB::table($this->finalTable)
+                            ->where('FOGLIO', $record->FOGLIO)
+                            ->where('PARTICELLA', $record->PARTICELLA)
+                            ->update(['proprietario' => 'ERRORE', 'catasto_tipo' => 'ERRORE']);
+                    } catch (\Throwable $e2) {
+                        Log::error("JOB: impossibile marcare ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e2->getMessage());
+                    }
                 }
             }
 
@@ -169,7 +173,9 @@ class AggiornaPropietariBooster implements ShouldQueue
                 'started_at' => now()->toDateTimeString(),
             ], 14400);
 
-            Log::info("JOB: processate $processed / $total");
+            if ($processed % 500 === 0 || $processed === $total) {
+                Log::info("JOB: processate $processed / $total");
+            }
         } while (true);
 
         Cache::put($cacheKey, [

@@ -117,11 +117,6 @@ class BoosterController extends Controller
             return response()->json(['error' => 'Parametri mancanti'], 400);
         }
 
-        // ⚠️ Forza il ricollegamento di pgsql2 — dopo operazioni massive su pgsql
-        // la connessione pgsql2 può essere stata persa o alterata
-        DB::purge('pgsql2');
-        DB::reconnect('pgsql2');
-
         $fakeRequest = new \Illuminate\Http\Request([
             'code_comune' => $code_comune,
             'foglio'      => $foglio,
