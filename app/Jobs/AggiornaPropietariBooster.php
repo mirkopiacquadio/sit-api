@@ -38,14 +38,18 @@ class AggiornaPropietariBooster implements ShouldQueue
 
         Log::info("JOB START: table={$this->finalTable} comune={$this->code_comune}");
 
-        $booster = new BoosterController();
+        // Switch pgsql al db del comune SENZA purge: aggiorna in-place il medesimo
+        // oggetto connessione che DatabaseQueue tiene, così deleteReserved() funzionerà.
+        $dbName = BoosterController::$nomiDb[strtoupper($this->code_comune)]
+            ?? throw new \Exception("Codice comune non trovato: {$this->code_comune}");
+        config(['database.connections.pgsql.database' => $dbName]);
+        DB::reconnect('pgsql');
 
-        $reflection = new \ReflectionMethod(BoosterController::class, 'setDB');
-        $reflection->setAccessible(true);
-        $reflection->invoke($booster, $this->code_comune);
-
-        DB::purge('pgsql2');
+        // Riconnette pgsql2 per le query sulla tabella finale (informativo-immobili)
+        config(['database.connections.pgsql2.database' => config('database.connections.pgsql2.database')]);
         DB::reconnect('pgsql2');
+
+        $booster = new BoosterController();
 
         $total = DB::table($this->finalTable)
             ->whereNull('proprietario')
@@ -185,26 +189,18 @@ class AggiornaPropietariBooster implements ShouldQueue
             'completed_at' => now()->toDateTimeString(),
         ], 14400);
 
-        // Ripristina ENTRAMBE le connessioni all'originale.
-        // setDB() cambia 'pgsql' al db del comune — ma Laravel usa 'pgsql' per la
-        // tabella jobs. Se non ripristinato, deleteReserved() va su un db sbagliato
-        // e crasha con "beginTransaction() on null", lasciando il job in coda per sempre.
-        DB::purge('pgsql');
+        // Ripristina pgsql a info-generali in-place (NO purge) così DatabaseQueue
+        // usa ancora lo stesso oggetto connessione e deleteReserved() funziona.
         config(['database.connections.pgsql.database' => 'info-generali']);
         DB::reconnect('pgsql');
-
-        DB::purge('info-generali');
-        config(['database.connections.info-generali.database' => 'info-generali']);
-        DB::reconnect('info-generali');
 
         Log::info("JOB COMPLETATO: table={$this->finalTable} totale=$processed");
     }
 
     public function failed(\Throwable $exception): void
     {
-        // Ripristina pgsql prima di qualsiasi operazione Laravel post-failure
+        // Ripristina pgsql in-place (NO purge) prima del cleanup di Laravel
         try {
-            DB::purge('pgsql');
             config(['database.connections.pgsql.database' => 'info-generali']);
             DB::reconnect('pgsql');
         } catch (\Throwable) {}
