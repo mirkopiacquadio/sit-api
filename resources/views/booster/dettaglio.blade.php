@@ -127,16 +127,19 @@
                                         <div>
                                             <strong>Fabbricati</strong>
                                             @foreach($subFabbricati as $sub)
-                                                <div class="mt-1">
-                                                    <span class="fw-semibold">Sub {{ $sub['sub'] }}</span>
+                                                <div class="mt-2 ps-2 border-start border-2 border-primary">
+                                                    <span class="badge bg-primary" style="font-size:0.7rem;">
+                                                        Sub {{ $sub['sub'] }} · {{ $sub['tipo'] }}
+                                                        @if(!empty($sub['catqua'])) · {{ $sub['catqua'] }}@endif
+                                                    </span>
                                                     @if(!empty($sub['proprietario']))
-                                                        <ul class="mb-0 ps-3">
+                                                        <ul class="mb-0 mt-1 ps-3" style="font-size:0.8rem;">
                                                             @foreach(explode(' | ', $sub['proprietario']) as $prop)
                                                                 <li>{{ trim($prop) }}</li>
                                                             @endforeach
                                                         </ul>
                                                     @else
-                                                        <div class="ps-2 text-muted fst-italic">Non disponibile</div>
+                                                        <small class="d-block text-muted mt-1 fst-italic">Non disponibile</small>
                                                     @endif
                                                 </div>
                                             @endforeach
