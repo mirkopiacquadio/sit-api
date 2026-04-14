@@ -38,18 +38,17 @@ class AggiornaPropietariBooster implements ShouldQueue
 
         Log::info("JOB START: table={$this->finalTable} comune={$this->code_comune}");
 
+        $booster = new BoosterController();
+
         // Switch pgsql al db del comune SENZA purge: aggiorna in-place il medesimo
         // oggetto connessione che DatabaseQueue tiene, così deleteReserved() funzionerà.
-        $dbName = BoosterController::$nomiDb[strtoupper($this->code_comune)]
+        $dbName = $booster->nomiDb[strtoupper($this->code_comune)]
             ?? throw new \Exception("Codice comune non trovato: {$this->code_comune}");
         config(['database.connections.pgsql.database' => $dbName]);
         DB::reconnect('pgsql');
 
         // Riconnette pgsql2 per le query sulla tabella finale (informativo-immobili)
-        config(['database.connections.pgsql2.database' => config('database.connections.pgsql2.database')]);
         DB::reconnect('pgsql2');
-
-        $booster = new BoosterController();
 
         $total = DB::table($this->finalTable)
             ->whereNull('proprietario')
