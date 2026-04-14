@@ -112,9 +112,11 @@
                                     <div class="mb-2">
                                         <strong>Terreno</strong>
                                         @if($row->proprietario && $row->proprietario !== 'ERRORE')
-                                            @foreach(explode(' | ', $row->proprietario) as $prop)
-                                                <div>{{ trim($prop) }}</div>
-                                            @endforeach
+                                            <ul class="mb-0 ps-3">
+                                                @foreach(explode(' | ', $row->proprietario) as $prop)
+                                                    <li>{{ trim($prop) }}</li>
+                                                @endforeach
+                                            </ul>
                                         @else
                                             <div class="text-muted fst-italic">Non disponibile</div>
                                         @endif
@@ -128,9 +130,11 @@
                                                 <div class="mt-1">
                                                     <span class="fw-semibold">Sub {{ $sub['sub'] }}</span>
                                                     @if(!empty($sub['proprietario']))
-                                                        @foreach(explode(' | ', $sub['proprietario']) as $prop)
-                                                            <div class="ps-2">{{ trim($prop) }}</div>
-                                                        @endforeach
+                                                        <ul class="mb-0 ps-3">
+                                                            @foreach(explode(' | ', $sub['proprietario']) as $prop)
+                                                                <li>{{ trim($prop) }}</li>
+                                                            @endforeach
+                                                        </ul>
                                                     @else
                                                         <div class="ps-2 text-muted fst-italic">Non disponibile</div>
                                                     @endif
