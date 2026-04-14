@@ -40,10 +40,14 @@ class AggiornaPropietariBooster implements ShouldQueue
 
         $booster = new BoosterController();
 
+        $codeComune = strtoupper($this->code_comune);
+        if (!array_key_exists($codeComune, $booster->nomiDb)) {
+            throw new \Exception("Codice comune non trovato: {$this->code_comune}");
+        }
+        $dbName = $booster->nomiDb[$codeComune];
+
         // Switch pgsql al db del comune SENZA purge: aggiorna in-place il medesimo
         // oggetto connessione che DatabaseQueue tiene, così deleteReserved() funzionerà.
-        $dbName = $booster->nomiDb[strtoupper($this->code_comune)]
-            ?? throw new \Exception("Codice comune non trovato: {$this->code_comune}");
         config(['database.connections.pgsql.database' => $dbName]);
         DB::reconnect('pgsql');
 
