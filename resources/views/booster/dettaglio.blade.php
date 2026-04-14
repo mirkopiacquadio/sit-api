@@ -102,35 +102,42 @@
                                     @endif
                                 </td>
                                 <td class="text-end">{{ number_format($row->aisect, 2, ',', '.') }}</td>
-                                <td style="max-width:380px;">
-                                    {{-- Proprietari particella principale --}}
-                                    @if($row->proprietario)
-                                        <ul class="mb-1 ps-3" style="font-size:0.8rem;">
+                                <td style="max-width:420px; font-size:0.82rem;">
+                                    @php
+                                        $subTerreni   = array_filter($subData, fn($s) => ($s['tipo'] ?? '') === 'Terreno');
+                                        $subFabbricati = array_filter($subData, fn($s) => ($s['tipo'] ?? '') === 'Fabbricato');
+                                    @endphp
+
+                                    {{-- SEZIONE TERRENO --}}
+                                    <div class="mb-2">
+                                        <strong>Terreno</strong>
+                                        @if($row->proprietario && $row->proprietario !== 'ERRORE')
                                             @foreach(explode(' | ', $row->proprietario) as $prop)
-                                                <li>{{ trim($prop) }}</li>
+                                                <div>{{ trim($prop) }}</div>
                                             @endforeach
-                                        </ul>
-                                    @else
-                                        <div class="mb-1 text-muted fst-italic"><small>Non disponibile</small></div>
-                                    @endif
-                                    {{-- Sub (terreni/fabbricati) --}}
-                                    @foreach($subData as $sub)
-                                        <div class="mt-2 ps-2 border-start border-2 border-primary">
-                                            <span class="badge bg-primary" style="font-size:0.7rem;">
-                                                Sub {{ $sub['sub'] }} · {{ $sub['tipo'] }}
-                                                @if(!empty($sub['catqua'])) · {{ $sub['catqua'] }}@endif
-                                            </span>
-                                            @if(!empty($sub['proprietario']))
-                                                <ul class="mb-0 mt-1 ps-3" style="font-size:0.8rem;">
-                                                    @foreach(explode(' | ', $sub['proprietario']) as $prop)
-                                                        <li>{{ trim($prop) }}</li>
-                                                    @endforeach
-                                                </ul>
-                                            @else
-                                                <small class="d-block text-muted mt-1 fst-italic">Non disponibile</small>
-                                            @endif
+                                        @else
+                                            <div class="text-muted fst-italic">Non disponibile</div>
+                                        @endif
+                                    </div>
+
+                                    {{-- SEZIONE FABBRICATI --}}
+                                    @if(count($subFabbricati) > 0)
+                                        <div>
+                                            <strong>Fabbricati</strong>
+                                            @foreach($subFabbricati as $sub)
+                                                <div class="mt-1">
+                                                    <span class="fw-semibold">Sub {{ $sub['sub'] }}</span>
+                                                    @if(!empty($sub['proprietario']))
+                                                        @foreach(explode(' | ', $sub['proprietario']) as $prop)
+                                                            <div class="ps-2">{{ trim($prop) }}</div>
+                                                        @endforeach
+                                                    @else
+                                                        <div class="ps-2 text-muted fst-italic">Non disponibile</div>
+                                                    @endif
+                                                </div>
+                                            @endforeach
                                         </div>
-                                    @endforeach
+                                    @endif
                                 </td>
                             </tr>
                         @empty
