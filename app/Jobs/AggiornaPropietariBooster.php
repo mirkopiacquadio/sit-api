@@ -41,10 +41,39 @@ class AggiornaPropietariBooster implements ShouldQueue
         $booster = new BoosterController();
 
         $codeComune = strtoupper($this->code_comune);
-        if (!array_key_exists($codeComune, $booster->nomiDb)) {
+        $nomiDb = [
+            "9999" => 'morcone-webgis',
+            "B946" => 'casavatore-webgis',
+            "D230" => 'cusanomutri-webgis',
+            "D469" => 'faicchio-webgis',
+            "D784" => 'frasso_telesino-webgis',
+            "I062" => 'sannicolamanfredi-webgis',
+            "F717" => 'morcone-webgis',
+            "G848" => 'pontelandolfo-webgis',
+            "L185" => 'toccocaudio-webgis',
+            "H967" => 'sanlorenzomaggiore-webgis',
+            "G311" => 'pannarano-webgis',
+            "C659" => 'chiusanosandomenico-webgis',
+            "G991" => 'prata_sannita-webgis',
+            "H313" => 'ripalimosani-webgis',
+            "L254" => 'torrecuso-webgis',
+            "F111" => 'melito-webgis',
+            "D361" => 'dragoni-webgis',
+            "C245" => 'castelpagano-webgis',
+            "H894" => 'sangiorgiodelsannio-webgis',
+            "H898" => 'sangiorgiolamolara-webgis',
+            "F448" => 'montecalvoirpino-webgis',
+            "L739" => 'venticano-webgis',
+            "D756" => 'fragnetomonforte-webgis',
+            "F113" => 'melizzano-webgis',
+            "C250" => 'castelpoto-webgis',
+            "G386" => 'paupisi-webgis',
+            "H087" => 'puglianello-webgis',
+        ];
+        if (!array_key_exists($codeComune, $nomiDb)) {
             throw new \Exception("Codice comune non trovato: {$this->code_comune}");
         }
-        $dbName = $booster->nomiDb[$codeComune];
+        $dbName = $nomiDb[$codeComune];
 
         // Switch pgsql al db del comune SENZA purge: aggiorna in-place il medesimo
         // oggetto connessione che DatabaseQueue tiene, così deleteReserved() funzionerà.
