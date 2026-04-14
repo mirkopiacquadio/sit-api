@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 class BoosterController extends Controller
 {
     private $elencoFg = array();
+    private $infoComune = [];
     public $nomiDb = array(
         "9999" => 'morcone-webgis',
         "B946" => 'casavatore-webgis',
