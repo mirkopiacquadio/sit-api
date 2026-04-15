@@ -56,7 +56,6 @@ class AppHelper
     public static function formattaCdu($dati, $uiu, $elencoNorme, $codCom, $nomiPiani)
     {
         $uiu = (array)$uiu;
-        $indirizzo = $dati['cducitta'].' - '.$dati['cducap'];
         $content = file_get_contents(storage_path("app/$codCom/Modelli/cdu.html"));
         $content = str_replace('{titolo}', $dati['cdutitolo'], $content);
         $content = str_replace('{qualita}', $dati['cduqualita'], $content);
@@ -66,7 +65,8 @@ class AppHelper
         $content = str_replace('{luogo_nascita}', $dati['cduluogo'], $content);
         $content = str_replace('{prov_nascita}', $dati['cduprovn'], $content);
         $content = str_replace('{data_nascita}', date('d/m/Y', strtotime($dati['cdudatan'])), $content);
-        $content = str_replace('{citta}',$indirizzo , $content);
+        $content = str_replace('{citta}',$dati['cducitta'] , $content);
+        $content = str_replace('{citta}',$$dati['cducap'] , $content);
         $content = str_replace('{prov}', $dati['cduprovv'], $content);
         $content = str_replace('{via}', $dati['cduvia'], $content);
         $content = str_replace('{num}', $dati['cdunum'], $content);
