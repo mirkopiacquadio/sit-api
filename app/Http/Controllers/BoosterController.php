@@ -736,7 +736,7 @@ class BoosterController extends Controller
 
         $this->setDB($code_comune);
 
-        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
+        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
         return response()->json($rows);
     }
