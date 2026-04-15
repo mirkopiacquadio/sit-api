@@ -79,7 +79,9 @@
                             <th>ZTO</th>
                             {{-- <th>LAYER</th> --}}
                             <th>TIPO CATASTO</th>
-                            <th class="text-end">SUPERFICIE (m²)</th>
+                            <th class="text-end">SUP. CATASTALE (m²)</th>
+                            <th class="text-end">%</th>
+                            <th class="text-end">SUP. IN ZTO (m²)</th>
                             <th>PROPRIETARI / SUB</th>
                         </tr>
                     </thead>
@@ -101,6 +103,8 @@
                                 {{-- <td>{{ $row->LAYER }}</td> --}}
                                 <td><span class="badge bg-secondary badge-custom">{{ $row->catasto_tipo ?? '—' }}</span></td>
                                 <td><span class="badge bg-info badge-custom">{{ $row->STRING }}</span></td>
+                                <td class="text-end">{{ number_format($row->auiu, 2, ',', '.') }}</td>
+                                <td class="text-end">{{ number_format($row->perc, 2, ',', '.') }}%</td>
                                 <td class="text-end">{{ number_format($row->aisect, 2, ',', '.') }}</td>
                                 <td style="max-width:420px; font-size:0.82rem;">
                                     @php
@@ -149,7 +153,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-5">
+                                <td colspan="9" class="text-center text-muted py-5">
                                     <em>Nessun dato disponibile</em>
                                 </td>
                             </tr>
