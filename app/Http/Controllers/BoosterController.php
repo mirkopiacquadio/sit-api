@@ -730,7 +730,7 @@ class BoosterController extends Controller
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
             return response()->json(['error' => 'Codice comune non valido'], 400);
         }
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2}_\d{2})?$/', $table)) {
+        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
             return response()->json(['error' => 'Nome tabella non valido'], 400);
         }
 

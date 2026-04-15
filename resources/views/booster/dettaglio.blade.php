@@ -73,12 +73,12 @@
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>LAYER</th>
-                            <th>ZTO</th>
                             <th>FOGLIO</th>
                             <th>PARTICELLA</th>
-                            <th>TIPO CATASTO</th>
                             <th>STATO</th>
+                            <th>ZTO</th>
+                            {{-- <th>LAYER</th> --}}
+                            <th>TIPO CATASTO</th>
                             <th class="text-end">SUPERFICIE (m²)</th>
                             <th>PROPRIETARI / SUB</th>
                         </tr>
@@ -87,11 +87,8 @@
                         @forelse($rows as $row)
                             @php $subData = json_decode($row->sub_data ?? '[]', true) ?: []; @endphp
                             <tr>
-                                <td>{{ $row->LAYER }}</td>
-                                <td><span class="badge bg-info badge-custom">{{ $row->STRING }}</span></td>
                                 <td><strong>{{ $row->FOGLIO }}</strong></td>
                                 <td><strong>{{ $row->PARTICELLA }}</strong></td>
-                                <td><span class="badge bg-secondary badge-custom">{{ $row->catasto_tipo ?? '—' }}</span></td>
                                 <td>
                                     @if($row->STATO == 'LIBERA')
                                         <span class="badge bg-success badge-custom">{{ $row->STATO }}</span>
@@ -101,6 +98,9 @@
                                         <span class="badge bg-secondary badge-custom">{{ $row->STATO }}</span>
                                     @endif
                                 </td>
+                                {{-- <td>{{ $row->LAYER }}</td> --}}
+                                <td><span class="badge bg-secondary badge-custom">{{ $row->catasto_tipo ?? '—' }}</span></td>
+                                <td><span class="badge bg-info badge-custom">{{ $row->STRING }}</span></td>
                                 <td class="text-end">{{ number_format($row->aisect, 2, ',', '.') }}</td>
                                 <td style="max-width:420px; font-size:0.82rem;">
                                     @php
