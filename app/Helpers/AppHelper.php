@@ -66,7 +66,7 @@ class AppHelper
         $content = str_replace('{prov_nascita}', $dati['cduprovn'], $content);
         $content = str_replace('{data_nascita}', date('d/m/Y', strtotime($dati['cdudatan'])), $content);
         $content = str_replace('{citta}',$dati['cducitta'] , $content);
-        $content = str_replace('{citta}',$$dati['cducap'] , $content);
+        $content = str_replace('{cap}',$dati['cducap'] , $content);
         $content = str_replace('{prov}', $dati['cduprovv'], $content);
         $content = str_replace('{via}', $dati['cduvia'], $content);
         $content = str_replace('{num}', $dati['cdunum'], $content);
