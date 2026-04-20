@@ -64,6 +64,7 @@ class AggiornaPropietariBooster implements ShouldQueue
             "H898" => 'sangiorgiolamolara-webgis',
             "F448" => 'montecalvoirpino-webgis',
             "L739" => 'venticano-webgis',
+            "I197" => 'santagatadegoti-webgis',
             "D756" => 'fragnetomonforte-webgis',
             "F113" => 'melizzano-webgis',
             "C250" => 'castelpoto-webgis',
