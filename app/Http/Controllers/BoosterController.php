@@ -472,33 +472,11 @@ class BoosterController extends Controller
     private function getComuniList()
     {
         return [
-            'B946' => 'Casavatore',
-            'D230' => 'Cusano Mutri',
-            'D469' => 'Faicchio',
-            'D784' => 'Frasso Telesino',
             "I062" => 'San Nicola Manfredi',
-            'F717' => 'Morcone',
-            'G848' => 'Pontelandolfo',
-            'L185' => 'Tocco Caudio',
-            'H967' => 'San Lorenzo Maggiore',
-            'G311' => 'Pannarano',
-            'G991' => 'Prata Sannita',
-            'H313' => 'Ripalimosani',
-            'L254' => 'Torrecuso',
-            'F111' => 'Melito',
             'C659' => 'Chiusano San Domenico',
-            'D361' => 'Dragoni',
             'C245' => 'Castelpagano',
-            'H894' => 'San Giorgio del Sannio',
-            'H898' => 'San Giorgio la Molara',
-            'F448' => 'Montecalvo Irpino',
-            'L739' => 'Venticano',
             'D756' => 'Fragneto Monforte',
-            "I197" => 'Sant\'Agata dei Goti',
-            'F113' => 'Melizzano',
-            'C250' => 'Castelpoto',
-            'G386' => 'Paupisi',
-            'H087' => 'Puglianello',
+            "I197" => 'Sant\'Agata dei Goti'
         ];
     }
 
