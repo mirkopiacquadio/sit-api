@@ -472,20 +472,7 @@ class BoosterController extends Controller
     private function getComuniList()
     {
         return [
-            'B946' => 'Casavatore',
-            'D230' => 'Cusano Mutri',
-            'D469' => 'Faicchio',
-            'D784' => 'Frasso Telesino',
             "I197" => 'San Nicola Manfredi',
-            'F717' => 'Morcone',
-            'G848' => 'Pontelandolfo',
-            'L185' => 'Tocco Caudio',
-            'H967' => 'San Lorenzo Maggiore',
-            'G311' => 'Pannarano',
-            'G991' => 'Prata Sannita',
-            'H313' => 'Ripalimosani',
-            'L254' => 'Torrecuso',
-            'F111' => 'Melito',
             'C659' => 'Chiusano San Domenico',
             'C245' => 'Castelpagano',
             'D756' => 'Fragneto Monforte',
