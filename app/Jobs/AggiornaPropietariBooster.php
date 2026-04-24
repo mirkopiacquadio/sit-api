@@ -17,8 +17,8 @@ class AggiornaPropietariBooster implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 7200; // 2 ore massimo
-    public $tries = 1; // Un solo tentativo: se crasha non si rimette in coda
+    public $timeout = 7200; 
+    public $tries = 1;
 
     public function __construct(
         private string $finalTable,
@@ -39,7 +39,6 @@ class AggiornaPropietariBooster implements ShouldQueue
         Log::info("JOB START: table={$this->finalTable} comune={$this->code_comune}");
 
         $booster = new BoosterController();
-
         $codeComune = strtoupper($this->code_comune);
         $nomiDb = [
             "9999" => 'morcone-webgis',

@@ -20,7 +20,7 @@ class BoosterController extends Controller
         "D230" => 'cusanomutri-webgis',
         "D469" => 'faicchio-webgis',
         "D784" => 'frasso_telesino-webgis',
-        "I197" => 'sannicolamanfredi-webgis',
+        "I062" => 'sannicolamanfredi-webgis',
         "F717" => 'morcone-webgis',
         "G848" => 'pontelandolfo-webgis',
         "L185" => 'toccocaudio-webgis',
@@ -472,7 +472,7 @@ class BoosterController extends Controller
     private function getComuniList()
     {
         return [
-            "I197" => 'San Nicola Manfredi',
+            "I062" => 'San Nicola Manfredi',
             'C659' => 'Chiusano San Domenico',
             'C245' => 'Castelpagano',
             'D756' => 'Fragneto Monforte',
