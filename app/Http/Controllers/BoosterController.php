@@ -574,22 +574,24 @@ class BoosterController extends Controller
         ");
             Log::info("BOOSTER STEP 6: CREATE base OK");
 
+            Log::info("BOOSTER STEP 7: DROP base1 START");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
+            Log::info("BOOSTER STEP 7b: DROP base1 OK - START CREATE base1");
             DB::statement("CREATE TABLE aree_edificabili_base1 AS
             SELECT p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\",
-                CASE 
-                    WHEN COUNT(e.*) = 0 THEN p.geom 
-                    ELSE ST_Difference(p.geom, ST_Union(e.geom)) 
+                CASE
+                    WHEN COUNT(e.*) = 0 THEN p.geom
+                    ELSE ST_Difference(p.geom, ST_Union(e.geom))
                 END AS geom
             FROM aree_edificabili_base p
             LEFT JOIN aree_edificabili_base e ON ST_Intersects(p.geom, e.geom) AND e.\"TIPOLOGIA\" = 'EDIFICIO'
             WHERE p.\"TIPOLOGIA\" = 'PARTICELLA'
             GROUP BY p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\", p.geom
         ");
-            Log::info("BOOSTER STEP 7: CREATE base1 OK");
+            Log::info("BOOSTER STEP 8: CREATE base1 OK");
 
             $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
-            Log::info("BOOSTER STEP 8: ztoList=$ztoList");
+            Log::info("BOOSTER STEP 9: ztoList=$ztoList - START CREATE finalTable");
 
             DB::statement("CREATE TABLE {$finalTable} AS
             SELECT tt.\"LAYER\", tt.\"STRING\", tt.auiu, sum(tt.perc) as perc,
@@ -611,19 +613,20 @@ class BoosterController extends Controller
             GROUP BY tt.\"LAYER\", tt.\"STRING\", tt.auiu, tt.\"TIPOLOGIA\", tt.\"PARTICELLA\", tt.\"FOGLIO\", tt.\"STATO\"
             ORDER BY tt.\"LAYER\", tt.\"FOGLIO\", tt.\"PARTICELLA\", tt.\"STATO\"
         ");
-            Log::info("BOOSTER STEP 9: CREATE finalTable OK");
+            Log::info("BOOSTER STEP 10: CREATE finalTable OK");
 
+            Log::info("BOOSTER STEP 11: ALTER TABLE START");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN catasto_tipo TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
-            Log::info("BOOSTER STEP 10: ALTER TABLE OK");
+            Log::info("BOOSTER STEP 11b: ALTER TABLE OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
-            Log::info("BOOSTER STEP 11: cleanup tabelle temporanee OK");
+            Log::info("BOOSTER STEP 12: cleanup tabelle temporanee OK");
             // Lancia il job in background — non blocca la risposta HTTP
             \App\Jobs\AggiornaPropietariBooster::dispatch($finalTable, $code_comune);
-            Log::info("BOOSTER STEP 12: job AggiornaPropietari lanciato in background");
+            Log::info("BOOSTER STEP 13: job AggiornaPropietari lanciato in background");
 
             return response()->json([
                 'success' => true,
