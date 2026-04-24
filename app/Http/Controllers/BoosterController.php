@@ -526,6 +526,8 @@ class BoosterController extends Controller
      */
     public function elabora(Request $request)
     {
+        set_time_limit(0);
+
         try {
             $code_comune = strtoupper($request->code_comune);
             $zto = $request->zto;
