@@ -558,6 +558,7 @@ class BoosterController extends Controller
             }
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
+            DB::statement("DROP TYPE IF EXISTS aree_edificabili_base CASCADE");
             Log::info("BOOSTER STEP 5: DROP base OK");
 
             DB::statement("CREATE TABLE aree_edificabili_base AS
@@ -576,6 +577,7 @@ class BoosterController extends Controller
 
             Log::info("BOOSTER STEP 7: DROP base1 START");
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base1 CASCADE");
+            DB::statement("DROP TYPE IF EXISTS aree_edificabili_base1 CASCADE");
             Log::info("BOOSTER STEP 7b: DROP base1 OK - START CREATE base1");
             DB::statement("CREATE TABLE aree_edificabili_base1 AS
             SELECT p.gid, p.\"FOGLIO\", p.\"PARTICELLA\", p.\"TIPOLOGIA\", p.\"STATO\",
