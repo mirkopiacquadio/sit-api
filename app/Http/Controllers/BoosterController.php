@@ -592,7 +592,7 @@ class BoosterController extends Controller
         ");
             Log::info("BOOSTER STEP 8: CREATE base1 OK");
 
-            $ztoList = collect($zto)->map(fn($v) => "'" . addslashes($v) . "'")->join(',');
+            $ztoList = collect($zto)->map(fn($v) => "'" . str_replace("'", "''", $v) . "'")->join(',');
             Log::info("BOOSTER STEP 9: ztoList=$ztoList - START CREATE finalTable");
 
             DB::statement("CREATE TABLE {$finalTable} AS
