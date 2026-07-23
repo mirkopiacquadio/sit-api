@@ -67,6 +67,7 @@ class AppHelper
         $content = str_replace('{data_nascita}', date('d/m/Y', strtotime($dati['cdudatan'])), $content);
         $content = str_replace('{citta}',$dati['cducitta'] , $content);
         $content = str_replace('{cap}',$dati['cducap'] , $content);
+        $content = str_replace('{codfisc}',$dati['cducf'] , $content);
         $content = str_replace('{prov}', $dati['cduprovv'], $content);
         $content = str_replace('{via}', $dati['cduvia'], $content);
         $content = str_replace('{num}', $dati['cdunum'], $content);
@@ -95,7 +96,7 @@ class AppHelper
             if ($uiu[$i]['fg'] != '' && $uiu[$i]['nm'] && count($uiu[$i]['intersects']) > 0) {
                 $sp = '';
                 if ($i > 0) $sp = '<br><br>';
-                $elencoIntersezioni .= $sp . '<p  style="font-family:Calibri, sans-serif; font-size:11pt;"><b> - che</b> l\'immobile identificato in Catasto al Foglio n. ' . $uiu[$i]['fg'] . '  Particella n. ' . $uiu[$i]['nm'];
+                $elencoIntersezioni .= $sp . '<p  style="font-family:Calibri, sans-serif; font-size:11pt;"><b> - che</b> l\'immobile identificato in Catasto al <b> Foglio n.' . $uiu[$i]['fg'] . '  Particella n.' .  $uiu[$i]['nm'] . '</b>';
                 $elencoFogli .= '<li  style="font-family:Calibri, sans-serif; font-size:11pt;">foglio n. ' . $uiu[$i]['fg'] . ' particella n. ' . $uiu[$i]['nm'];
                 if ($uiu[$i]['sb'] != '') {
                     $elencoIntersezioni .= ' sub n. ' . $uiu[$i]['sb'];
