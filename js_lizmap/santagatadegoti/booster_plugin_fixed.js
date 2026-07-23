@@ -9,6 +9,9 @@ function formatNomeElaborazione(nome) {
 
 lizMap.events.on({
     uicreated: function (e) {
+        const loginTributi = ($('#info-user-login').text() || '').toLowerCase();
+        if (loginTributi.indexOf('tributi') === -1) return;
+
         const html_booster = `
             <div id="booster-main" style="padding: 10px; background-color: white; height: 100%; overflow-y: auto;">
                 <h4>Elaborazioni Aree Edificabili</h4>
@@ -241,11 +244,53 @@ function openDettaglioElaborazione(tabella) {
             window.currentPage = 1;
             window.rowsPerPage = 20;
             window.currentTabella = tabella;
+            window.boosterSort = null; // reset ordinamento per la nuova tabella
             renderBoosterDettaglio();
         })
         .catch(() => {
             content.innerHTML = '<p class="text-danger">Errore durante il caricamento.</p>';
         });
+}
+
+// Intestazione di colonna ordinabile (prime 5 colonne del dettaglio).
+// field = nome della proprieta' nella riga (es. 'STRING' per ZTO).
+function boosterTh(label, field) {
+    const s = window.boosterSort || {};
+    const arrow = s.col === field ? (s.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+    return `<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="ordinaBooster('${field}')">${label}<span style="opacity:.5;font-size:10px;">${arrow}</span></th>`;
+}
+
+// Ordina window.boosterRows sul campo indicato, alternando asc/desc, e
+// riparte da pagina 1. FOGLIO e PARTICELLA sono ordinati in modo numerico.
+function ordinaBooster(field) {
+    const s = window.boosterSort || {};
+    const dir = (s.col === field && s.dir === 'asc') ? 'desc' : 'asc';
+    window.boosterSort = { col: field, dir: dir };
+
+    const numerico = (field === 'FOGLIO' || field === 'PARTICELLA');
+
+    window.boosterRows.sort((a, b) => {
+        let va = a[field], vb = b[field];
+        va = (va === null || va === undefined) ? '' : va;
+        vb = (vb === null || vb === undefined) ? '' : vb;
+
+        let cmp;
+        if (numerico) {
+            const na = parseFloat(String(va).replace(',', '.'));
+            const nb = parseFloat(String(vb).replace(',', '.'));
+            if (!isNaN(na) && !isNaN(nb)) {
+                cmp = na - nb;
+            } else {
+                cmp = String(va).localeCompare(String(vb), 'it', { numeric: true });
+            }
+        } else {
+            cmp = String(va).localeCompare(String(vb), 'it', { numeric: true, sensitivity: 'base' });
+        }
+        return dir === 'asc' ? cmp : -cmp;
+    });
+
+    window.currentPage = 1;
+    renderBoosterDettaglio();
 }
 
 function renderBoosterDettaglio() {
@@ -262,11 +307,11 @@ function renderBoosterDettaglio() {
         <div style="overflow-x: auto;">
         <table class="table table-bordered table-sm" style="font-size: 11px;">
             <thead><tr>
-                <th>FOGLIO</th>
-                <th>PARTICELLA</th>
-                <th>STATO</th>
-                <th>ZTO</th>
-                <th>TIPO CATASTO</th>
+                ${boosterTh('FOGLIO', 'FOGLIO')}
+                ${boosterTh('PARTICELLA', 'PARTICELLA')}
+                ${boosterTh('STATO', 'STATO')}
+                ${boosterTh('ZTO', 'STRING')}
+                ${boosterTh('TIPO CATASTO', 'catasto_tipo')}
                 <th>SUP. CATASTALE</th>
                 <th>%</th>
                 <th>SUP. IN ZTO</th>

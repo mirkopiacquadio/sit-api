@@ -67,18 +67,35 @@
             </div>
         @endif
 
+        @php
+            // Intestazione di colonna ordinabile (prime 5 colonne).
+            $sortTh = function ($label, $field) use ($sort, $dir, $code_comune, $table) {
+                $nextDir = ($sort === $field && $dir === 'asc') ? 'desc' : 'asc';
+                $arrow   = $sort === $field ? ($dir === 'asc' ? '▲' : '▼') : '⇅';
+                $url     = route('booster.dettaglio', [
+                    'code_comune' => $code_comune,
+                    'table'       => $table,
+                    'sort'        => $field,
+                    'dir'         => $nextDir,
+                ]);
+                return '<a href="' . $url . '" class="text-white text-decoration-none">'
+                    . e($label)
+                    . ' <span style="opacity:.6;font-size:.75em;">' . $arrow . '</span></a>';
+            };
+        @endphp
+
         <!-- Tabella dati -->
         <div class="table-wrapper">
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>FOGLIO</th>
-                            <th>PARTICELLA</th>
-                            <th>STATO</th>
-                            <th>ZTO</th>
+                            <th style="white-space:nowrap;">{!! $sortTh('FOGLIO', 'FOGLIO') !!}</th>
+                            <th style="white-space:nowrap;">{!! $sortTh('PARTICELLA', 'PARTICELLA') !!}</th>
+                            <th style="white-space:nowrap;">{!! $sortTh('STATO', 'STATO') !!}</th>
+                            <th style="white-space:nowrap;">{!! $sortTh('ZTO', 'STRING') !!}</th>
                             {{-- <th>LAYER</th> --}}
-                            <th>TIPO CATASTO</th>
+                            <th style="white-space:nowrap;">{!! $sortTh('TIPO CATASTO', 'catasto_tipo') !!}</th>
                             <th class="text-end">SUP. CATASTALE (m²)</th>
                             <th class="text-end">%</th>
                             <th class="text-end">SUP. IN ZTO (m²)</th>
@@ -169,7 +186,7 @@
                         Visualizzati {{ $rows->firstItem() }} - {{ $rows->lastItem() }} di {{ $rows->total() }} righe
                     </div>
                     <div>
-                        {{ $rows->appends(['code_comune' => $code_comune])->links('pagination::bootstrap-5') }}
+                        {{ $rows->appends(array_filter(['code_comune' => $code_comune, 'sort' => $sort, 'dir' => $dir]))->links('pagination::bootstrap-5') }}
                     </div>
                 </div>
             </div>

@@ -684,7 +684,7 @@ class BoosterController extends Controller
     }
 
     // Metodo dettaglioElaborazione - mostra pagina dettaglio
-    public function dettaglioElaborazione($code_comune, $table)
+    public function dettaglioElaborazione(Request $request, $code_comune, $table)
     {
         try {
             $code_comune = strtoupper($code_comune);
@@ -699,11 +699,37 @@ class BoosterController extends Controller
 
             $this->setDB($code_comune);
 
-            $rows = DB::table($table)
-                ->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"')
-                ->paginate(50);
+            // Ordinamento sulle prime 5 colonne (whitelist -> nessuna injection).
+            $sortMap = [
+                'FOGLIO'       => '"FOGLIO"',
+                'PARTICELLA'   => '"PARTICELLA"',
+                'STATO'        => '"STATO"',
+                'STRING'       => '"STRING"',      // ZTO
+                'catasto_tipo' => 'catasto_tipo',  // TIPO CATASTO
+            ];
+            $sort = $request->get('sort');
+            $dir  = strtolower($request->get('dir')) === 'desc' ? 'desc' : 'asc';
 
-            return view('booster.dettaglio', compact('rows', 'code_comune', 'table'));
+            $query = DB::table($table);
+            if ($sort && isset($sortMap[$sort])) {
+                $col = $sortMap[$sort];
+                if ($sort === 'FOGLIO' || $sort === 'PARTICELLA') {
+                    // ordinamento numerico-naturale (zero-pad su testo, sempre sicuro)
+                    $query->orderByRaw("lpad({$col}::text, 12, '0') {$dir}");
+                } else {
+                    $query->orderByRaw("{$col} {$dir}");
+                }
+                // tie-breaker stabile
+                $query->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"');
+            } else {
+                $sort = null;
+                $dir  = 'asc';
+                $query->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"');
+            }
+
+            $rows = $query->paginate(50);
+
+            return view('booster.dettaglio', compact('rows', 'code_comune', 'table', 'sort', 'dir'));
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Errore: ' . $e->getMessage());
         }
