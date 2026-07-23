@@ -29,30 +29,141 @@ lizMap.events.on({
     },
 
     minidockopened: function (e) {
+        // Il Booster viene mostrato come modale grande e centrato.
+        // Ogni altro minidock ripristina lo stato normale.
         if (e.id === 'booster') {
-            const headerStyles = window.getComputedStyle(document.getElementById('header'));
-            let height, width;
+            apriBoosterModal();
+        } else {
+            chiudiBoosterModalUI();
+        }
+    },
 
-            if (headerStyles.display === 'none') {
-                const mapStyles = window.getComputedStyle(document.getElementById('map'));
-                height = (parseFloat(mapStyles.height) * 50 / 100) - 15;
-                width = document.getElementById('mini-dock').getBoundingClientRect().width + 15;
-            } else {
-                const sidemenuStyles = window.getComputedStyle(document.getElementById('mapmenu'));
-                height = (parseFloat(sidemenuStyles.height) * 50 / 100);
-                width = 735;
-            }
-
-            const boosterDock = document.getElementById('booster');
-            const mini_dock = document.getElementById('mini-dock');
-
-            boosterDock.style.width = width + 'px';
-            boosterDock.style.height = height + 'px';
-            mini_dock.style.maxWidth = width + 'px';
-            mini_dock.style.maxHeight = height + 'px';
+    minidockclosed: function (e) {
+        if (e.id === 'booster') {
+            chiudiBoosterModalUI();
         }
     }
 });
+
+// ---------------------------------------------------------------------------
+// Modale Booster: trasforma il #mini-dock in un overlay centrato molto piu'
+// grande quando e' attiva la scheda "booster". Tutti gli stili sono applicati
+// via una classe sul <body> (booster-modal-open) e vengono rimossi alla
+// chiusura, cosi' non viene alterato il comportamento degli altri minidock.
+// ---------------------------------------------------------------------------
+(function injectBoosterModalStyle() {
+    if (document.getElementById('booster-modal-style')) return;
+    const style = document.createElement('style');
+    style.id = 'booster-modal-style';
+    style.textContent = `
+        #booster-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1955;
+        }
+        body.booster-modal-open #mini-dock {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: min(1250px, 94vw) !important;
+            height: min(880px, 92vh) !important;
+            max-width: 94vw !important;
+            max-height: 92vh !important;
+            background: #fff !important;
+            border-radius: 10px !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45) !important;
+            z-index: 1960 !important;
+            overflow: hidden !important;
+        }
+        body.booster-modal-open #mini-dock .tabbable {
+            display: flex !important;
+            flex-direction: column !important;
+            height: 100% !important;
+        }
+        body.booster-modal-open #mini-dock #mini-dock-content {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            height: auto !important;
+            overflow: hidden !important;
+        }
+        body.booster-modal-open #mini-dock #mini-dock-tabs {
+            flex: 0 0 auto !important;
+        }
+        body.booster-modal-open #mini-dock #booster.tab-pane {
+            height: 100% !important;
+        }
+        body.booster-modal-open #mini-dock #booster > .booster {
+            height: 100% !important;
+        }
+        body.booster-modal-open #mini-dock #booster-main,
+        body.booster-modal-open #mini-dock #booster-dettaglio {
+            height: 100% !important;
+            max-height: 100% !important;
+        }
+        /* Titolo leggibile su sfondo bianco (di default e' quasi bianco) */
+        body.booster-modal-open #mini-dock span.text {
+            color: #333 !important;
+        }
+        /* Pulsante di chiusura: l'icona e' uno sprite bianco (icon-white),
+           quindi lo rendiamo visibile con un cerchietto rosso. */
+        body.booster-modal-open #mini-dock .mini-dock-close {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 26px !important;
+            height: 26px !important;
+            background: #dc3545 !important;
+            border-radius: 50% !important;
+            z-index: 10 !important;
+            cursor: pointer !important;
+        }
+    `;
+    document.head.appendChild(style);
+})();
+
+function apriBoosterModal() {
+    document.body.classList.add('booster-modal-open');
+
+    if (!document.getElementById('booster-backdrop')) {
+        const backdrop = document.createElement('div');
+        backdrop.id = 'booster-backdrop';
+        backdrop.addEventListener('click', chiudiBoosterModal);
+        document.body.appendChild(backdrop);
+    }
+
+    document.addEventListener('keydown', boosterEscHandler);
+}
+
+// Ripristina soltanto la UI del modale (classe + backdrop + listener),
+// senza interagire con lo stato del minidock di Lizmap.
+function chiudiBoosterModalUI() {
+    document.body.classList.remove('booster-modal-open');
+
+    const backdrop = document.getElementById('booster-backdrop');
+    if (backdrop) backdrop.remove();
+
+    document.removeEventListener('keydown', boosterEscHandler);
+}
+
+// Chiusura "vera": preme il pulsante di chiusura del minidock Booster
+// (che a sua volta scatena l'evento minidockclosed -> chiudiBoosterModalUI).
+function chiudiBoosterModal() {
+    const closeBtn = Array.from(
+        document.querySelectorAll('#mini-dock #booster .mini-dock-close')
+    ).find(el => el.offsetParent !== null);
+
+    if (closeBtn) {
+        closeBtn.click();
+    } else {
+        chiudiBoosterModalUI();
+    }
+}
+
+function boosterEscHandler(e) {
+    if (e.key === 'Escape') chiudiBoosterModal();
+}
 
 function aggiornaElaborazioni() {
     fetch(`https://sitmonter.it/api/booster/elaborazioni?code_comune=${comuneUtente}`)
