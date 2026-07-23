@@ -47,6 +47,13 @@ Route::prefix('booster')->group(function () {
     Route::get("/downloadElaborazione", [BoosterController::class, "downloadElaborazione"]);
     Route::delete("/elaborazione", [BoosterController::class, "eliminaElaborazione"]);
     Route::get("/dettaglioElaborazione", [BoosterController::class, "dettaglioElaborazioneJson"]);
+
+    // Prepara tabella (aggiunge id/lavorato se mancanti - retroattivo)
+    Route::post("/preparaTabella", [BoosterController::class, "preparaTabella"]);
+    // Imposta lavorato 0/1 su una o piu' righe
+    Route::post("/lavorato", [BoosterController::class, "setLavorato"]);
+    // Elimina definitivamente una o piu' righe
+    Route::post("/eliminaRighe", [BoosterController::class, "eliminaRighe"]);
 });
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {

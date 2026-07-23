@@ -15,6 +15,8 @@
             font-size: 0.85rem;
             padding: 0.35em 0.65em;
         }
+        /* Riga marcata come "lavorato" (vince su striped/hover di Bootstrap) */
+        tr.riga-lavorata > td { background-color: #d4edda !important; }
     </style>
 </head>
 <body class="bg-light">
@@ -84,12 +86,23 @@
             };
         @endphp
 
+        <!-- Barra azioni selezione -->
+        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+            <span class="text-muted" id="sel-count">0 selezionate</span>
+            <button type="button" class="btn btn-sm btn-success" onclick="bulkLavorato(1)">✔ Segna lavorate</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="bulkLavorato(0)">↺ Segna non lavorate</button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="eliminaSelezionate()">🗑 Elimina selezionate</button>
+            <small class="text-muted ms-auto">La selezione agisce sulle righe della pagina corrente.</small>
+        </div>
+
         <!-- Tabella dati -->
         <div class="table-wrapper">
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-dark">
                         <tr>
+                            <th style="width:34px;text-align:center;"><input type="checkbox" onclick="toggleAll(this)" title="Seleziona pagina"></th>
+                            <th style="text-align:center;white-space:nowrap;">LAVORATO</th>
                             <th style="white-space:nowrap;">{!! $sortTh('FOGLIO', 'FOGLIO') !!}</th>
                             <th style="white-space:nowrap;">{!! $sortTh('PARTICELLA', 'PARTICELLA') !!}</th>
                             <th style="white-space:nowrap;">{!! $sortTh('STATO', 'STATO') !!}</th>
@@ -105,7 +118,17 @@
                     <tbody>
                         @forelse($rows as $row)
                             @php $subData = json_decode($row->sub_data ?? '[]', true) ?: []; @endphp
-                            <tr>
+                            <tr class="{{ $row->lavorato ? 'riga-lavorata' : '' }}" data-row-id="{{ $row->id }}">
+                                <td style="text-align:center;">
+                                    <input type="checkbox" class="row-check" value="{{ $row->id }}" onchange="updateSelCount()">
+                                </td>
+                                <td style="text-align:center;">
+                                    <div class="form-check form-switch d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               {{ $row->lavorato ? 'checked' : '' }}
+                                               onchange="toggleLavorato({{ $row->id }}, this.checked, this)">
+                                    </div>
+                                </td>
                                 <td><strong>{{ $row->FOGLIO }}</strong></td>
                                 <td><strong>{{ $row->PARTICELLA }}</strong></td>
                                 <td>
@@ -170,7 +193,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="text-center text-muted py-5">
+                                <td colspan="11" class="text-center text-muted py-5">
                                     <em>Nessun dato disponibile</em>
                                 </td>
                             </tr>
@@ -195,5 +218,71 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const BOOSTER_CODE  = @json($code_comune);
+        const BOOSTER_TABLE = @json($table);
+
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('.row-check:checked'))
+                .map(c => parseInt(c.value, 10))
+                .filter(n => !isNaN(n) && n > 0);
+        }
+
+        function updateSelCount() {
+            document.getElementById('sel-count').textContent = getSelectedIds().length + ' selezionate';
+        }
+
+        function toggleAll(master) {
+            document.querySelectorAll('.row-check').forEach(c => { c.checked = master.checked; });
+            updateSelCount();
+        }
+
+        function postJson(url, payload) {
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json());
+        }
+
+        // Switch singolo: aggiorna stato lavorato di una riga (ottimistico).
+        function toggleLavorato(id, checked, input) {
+            const val = checked ? 1 : 0;
+            postJson('/api/booster/lavorato', { code_comune: BOOSTER_CODE, table: BOOSTER_TABLE, ids: [id], lavorato: val })
+                .then(res => {
+                    if (res && res.ok) {
+                        const tr = input.closest('tr');
+                        if (tr) tr.classList.toggle('riga-lavorata', val === 1);
+                    } else {
+                        input.checked = !checked; // revert
+                        alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+                    }
+                })
+                .catch(() => { input.checked = !checked; alert('Errore di rete'); });
+        }
+
+        function bulkLavorato(val) {
+            const ids = getSelectedIds();
+            if (!ids.length) { alert('Nessuna riga selezionata'); return; }
+            postJson('/api/booster/lavorato', { code_comune: BOOSTER_CODE, table: BOOSTER_TABLE, ids: ids, lavorato: val })
+                .then(res => {
+                    if (res && res.ok) location.reload();
+                    else alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+                })
+                .catch(() => alert('Errore di rete'));
+        }
+
+        function eliminaSelezionate() {
+            const ids = getSelectedIds();
+            if (!ids.length) { alert('Nessuna riga selezionata'); return; }
+            if (!confirm('Eliminare definitivamente ' + ids.length + ' riga/e? L\'operazione non è reversibile.')) return;
+            postJson('/api/booster/eliminaRighe', { code_comune: BOOSTER_CODE, table: BOOSTER_TABLE, ids: ids })
+                .then(res => {
+                    if (res && res.ok) location.reload();
+                    else alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+                })
+                .catch(() => alert('Errore di rete'));
+        }
+    </script>
 </body>
 </html>

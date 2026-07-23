@@ -122,6 +122,15 @@ lizMap.events.on({
             z-index: 10 !important;
             cursor: pointer !important;
         }
+        /* Riga marcata come "lavorato" */
+        tr.booster-lavorato > td { background: #d4edda !important; }
+        /* Switch "lavorato" del dettaglio Booster */
+        .booster-switch { position: relative; display: inline-block; width: 38px; height: 20px; vertical-align: middle; }
+        .booster-switch input { opacity: 0; width: 0; height: 0; }
+        .booster-switch span { position: absolute; inset: 0; background: #ccc; border-radius: 20px; transition: .2s; cursor: pointer; }
+        .booster-switch span:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+        .booster-switch input:checked + span { background: #198754; }
+        .booster-switch input:checked + span:before { transform: translateX(18px); }
     `;
     document.head.appendChild(style);
 })();
@@ -237,19 +246,32 @@ function openDettaglioElaborazione(tabella) {
     const content = document.getElementById('booster-dettaglio-content');
     content.innerHTML = '<p>Caricamento dati...</p>';
 
-    fetch(`https://sitmonter.it/api/booster/dettaglioElaborazione?code_comune=${comuneUtente}&table=${tabella}`)
-        .then(res => res.json())
-        .then(data => {
-            window.boosterRows = data;
-            window.currentPage = 1;
-            window.rowsPerPage = 20;
-            window.currentTabella = tabella;
-            window.boosterSort = null; // reset ordinamento per la nuova tabella
-            renderBoosterDettaglio();
-        })
-        .catch(() => {
-            content.innerHTML = '<p class="text-danger">Errore durante il caricamento.</p>';
-        });
+    // Retroattivo: assicura che la tabella abbia le colonne id/lavorato prima
+    // di leggere i dati (le tabelle vecchie ne erano prive).
+    preparaBoosterTabella(tabella).then(() => {
+        fetch(`https://sitmonter.it/api/booster/dettaglioElaborazione?code_comune=${comuneUtente}&table=${tabella}`)
+            .then(res => res.json())
+            .then(data => {
+                window.boosterRows = data;
+                window.currentPage = 1;
+                window.rowsPerPage = 20;
+                window.currentTabella = tabella;
+                window.boosterSort = null; // reset ordinamento per la nuova tabella
+                renderBoosterDettaglio();
+            })
+            .catch(() => {
+                content.innerHTML = '<p class="text-danger">Errore durante il caricamento.</p>';
+            });
+    });
+}
+
+// Chiama il BE per aggiungere id/lavorato se mancanti (idempotente).
+function preparaBoosterTabella(tabella) {
+    return fetch('https://sitmonter.it/api/booster/preparaTabella', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_comune: comuneUtente, table: tabella })
+    }).catch(() => {});
 }
 
 // Intestazione di colonna ordinabile (prime 5 colonne del dettaglio).
@@ -300,13 +322,21 @@ function renderBoosterDettaglio() {
     const totalPages = Math.ceil(window.boosterRows.length / window.rowsPerPage);
 
     let html = `
-        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap:8px; flex-wrap:wrap;">
             <span class="text-muted">${window.boosterRows.length} righe totali</span>
-            <button class="btn btn-sm btn-success" onclick="scaricaElaborazione('${window.currentTabella}')">⬇ Scarica CSV</button>
+            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                <span class="text-muted" id="booster-sel-count">0 selezionate</span>
+                <button class="btn btn-sm btn-success" onclick="bulkLavorato(1)">✔ Lavorate</button>
+                <button class="btn btn-sm btn-secondary" onclick="bulkLavorato(0)">↺ Non lavorate</button>
+                <button class="btn btn-sm btn-danger" onclick="eliminaRigheSelezionate()">🗑 Elimina selezionate</button>
+                <button class="btn btn-sm btn-outline-success" onclick="scaricaElaborazione('${window.currentTabella}')">⬇ CSV</button>
+            </div>
         </div>
         <div style="overflow-x: auto;">
         <table class="table table-bordered table-sm" style="font-size: 11px;">
             <thead><tr>
+                <th style="width:28px;text-align:center;"><input type="checkbox" title="Seleziona pagina" onclick="toggleSelectAllBooster(this)"></th>
+                <th style="text-align:center;white-space:nowrap;">LAVORATO</th>
                 ${boosterTh('FOGLIO', 'FOGLIO')}
                 ${boosterTh('PARTICELLA', 'PARTICELLA')}
                 ${boosterTh('STATO', 'STATO')}
@@ -364,8 +394,13 @@ function renderBoosterDettaglio() {
 
         const statoColor = row.STATO === 'LIBERA' ? '#198754' : row.STATO === 'EDIFICATA' ? '#ffc107' : '#6c757d';
         const statoText = row.STATO === 'EDIFICATA' ? 'color:#000;' : 'color:white;';
+        const lavorato = String(row.lavorato) === '1';
 
-        html += `<tr style="cursor:pointer;" onclick="apriDaBooster('${foglio}', '${particella}')">
+        html += `<tr class="${lavorato ? 'booster-lavorato' : ''}" style="cursor:pointer;" onclick="apriDaBooster('${foglio}', '${particella}')">
+                    <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="booster-row-check" value="${row.id}" onchange="aggiornaContatoreSelezione()"></td>
+                    <td style="text-align:center;" onclick="event.stopPropagation()">
+                        <label class="booster-switch"><input type="checkbox" ${lavorato ? 'checked' : ''} onchange="toggleLavoratoRiga('${row.id}', this.checked, this)"><span></span></label>
+                    </td>
                     <td><strong>${foglio}</strong></td>
                     <td><strong>${particella}</strong></td>
                     <td><span style="background:${statoColor};${statoText}border-radius:4px;padding:1px 6px;font-size:10px;">${row.STATO || ''}</span></td>
@@ -408,4 +443,98 @@ function cambioBoosterPage(delta) {
 function tornaIndietro() {
     document.getElementById('booster-main').style.display = 'block';
     document.getElementById('booster-dettaglio').style.display = 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Selezione righe + azioni "lavorato" / eliminazione (una o piu' righe).
+// ---------------------------------------------------------------------------
+function getBoosterSelectedIds() {
+    return Array.from(document.querySelectorAll('.booster-row-check:checked'))
+        .map(c => parseInt(c.value, 10))
+        .filter(n => !isNaN(n) && n > 0);
+}
+
+function aggiornaContatoreSelezione() {
+    const el = document.getElementById('booster-sel-count');
+    if (el) el.textContent = getBoosterSelectedIds().length + ' selezionate';
+}
+
+function toggleSelectAllBooster(master) {
+    document.querySelectorAll('.booster-row-check').forEach(c => { c.checked = master.checked; });
+    aggiornaContatoreSelezione();
+}
+
+// Aggiorna localmente il valore lavorato nelle righe in memoria.
+function aggiornaLavoratoLocale(ids, val) {
+    const set = new Set(ids.map(String));
+    window.boosterRows.forEach(r => { if (set.has(String(r.id))) r.lavorato = val; });
+}
+
+function toggleLavoratoRiga(id, checked, input) {
+    const val = checked ? 1 : 0;
+    fetch('https://sitmonter.it/api/booster/lavorato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_comune: comuneUtente, table: window.currentTabella, ids: [id], lavorato: val })
+    })
+        .then(res => res.json())
+        .then(res => {
+            if (res && res.ok) {
+                // Aggiornamento ottimistico: niente re-render, mantiene selezione/posizione.
+                aggiornaLavoratoLocale([id], val);
+                if (input) {
+                    const tr = input.closest('tr');
+                    if (tr) tr.classList.toggle('booster-lavorato', val === 1);
+                }
+            } else {
+                if (input) input.checked = !checked; // revert
+                alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+            }
+        })
+        .catch(() => { if (input) input.checked = !checked; alert('Errore di rete'); });
+}
+
+function bulkLavorato(val) {
+    const ids = getBoosterSelectedIds();
+    if (!ids.length) { alert('Nessuna riga selezionata'); return; }
+    fetch('https://sitmonter.it/api/booster/lavorato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_comune: comuneUtente, table: window.currentTabella, ids: ids, lavorato: val })
+    })
+        .then(res => res.json())
+        .then(res => {
+            if (res && res.ok) {
+                aggiornaLavoratoLocale(ids, val);
+                renderBoosterDettaglio();
+            } else {
+                alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+            }
+        })
+        .catch(() => alert('Errore di rete'));
+}
+
+function eliminaRigheSelezionate() {
+    const ids = getBoosterSelectedIds();
+    if (!ids.length) { alert('Nessuna riga selezionata'); return; }
+    if (!confirm('Eliminare definitivamente ' + ids.length + ' riga/e? L\'operazione non è reversibile.')) return;
+
+    fetch('https://sitmonter.it/api/booster/eliminaRighe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code_comune: comuneUtente, table: window.currentTabella, ids: ids })
+    })
+        .then(res => res.json())
+        .then(res => {
+            if (res && res.ok) {
+                const set = new Set(ids.map(String));
+                window.boosterRows = window.boosterRows.filter(r => !set.has(String(r.id)));
+                const totalPages = Math.max(1, Math.ceil(window.boosterRows.length / window.rowsPerPage));
+                if (window.currentPage > totalPages) window.currentPage = totalPages;
+                renderBoosterDettaglio();
+            } else {
+                alert('Errore: ' + ((res && res.error) || 'operazione fallita'));
+            }
+        })
+        .catch(() => alert('Errore di rete'));
 }

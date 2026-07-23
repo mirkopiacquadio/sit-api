@@ -621,6 +621,9 @@ class BoosterController extends Controller
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN catasto_tipo TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
+            // Campo di lavorazione (0/1) e identita' di riga stabile.
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN id bigserial");
             Log::info("BOOSTER STEP 11b: ALTER TABLE OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
@@ -698,6 +701,7 @@ class BoosterController extends Controller
             }
 
             $this->setDB($code_comune);
+            $this->ensureBoosterColumns($table);
 
             // Ordinamento sulle prime 5 colonne (whitelist -> nessuna injection).
             $sortMap = [
@@ -748,9 +752,130 @@ class BoosterController extends Controller
         }
 
         $this->setDB($code_comune);
+        $this->ensureBoosterColumns($table);
 
-        $rows = DB::select("SELECT \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
+        $rows = DB::select("SELECT id, lavorato, \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
         return response()->json($rows);
+    }
+
+    /**
+     * Assicura che la tabella di elaborazione abbia le colonne 'lavorato' e 'id'.
+     * Serve per le tabelle create prima dell'introduzione di questi campi.
+     * $table deve essere gia' validato col regex delle tabelle booster.
+     */
+    private function ensureBoosterColumns($table)
+    {
+        $hasLavorato = DB::selectOne(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'lavorato'",
+            [$table]
+        );
+        if (!$hasLavorato) {
+            DB::statement("ALTER TABLE {$table} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
+        }
+
+        $hasId = DB::selectOne(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'id'",
+            [$table]
+        );
+        if (!$hasId) {
+            // bigserial: assegna un id univoco a tutte le righe gia' presenti
+            DB::statement("ALTER TABLE {$table} ADD COLUMN id bigserial");
+        }
+    }
+
+    /** Estrae e valida code_comune + table + ids dalla request (usato dai due frontend). */
+    private function parseRigheRequest(Request $request)
+    {
+        $code_comune = strtoupper($request->input('code_comune'));
+        $table       = $request->input('table');
+
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+            return ['error' => 'Codice comune non valido', 'status' => 400];
+        }
+        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+            return ['error' => 'Nome tabella non valido', 'status' => 400];
+        }
+
+        $ids = $request->input('ids', []);
+        if (!is_array($ids)) {
+            $ids = array_filter(explode(',', (string) $ids), fn($v) => $v !== '');
+        }
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $ids = array_filter($ids, fn($v) => $v > 0);
+
+        if (empty($ids)) {
+            return ['error' => 'Nessuna riga selezionata', 'status' => 400];
+        }
+
+        return ['code_comune' => $code_comune, 'table' => $table, 'ids' => array_values($ids)];
+    }
+
+    /** Imposta lavorato (0/1) su una o piu' righe. */
+    public function setLavorato(Request $request)
+    {
+        try {
+            $p = $this->parseRigheRequest($request);
+            if (isset($p['error'])) {
+                return response()->json(['error' => $p['error']], $p['status']);
+            }
+
+            $lavorato = (int) $request->input('lavorato') === 1 ? 1 : 0;
+
+            $this->setDB($p['code_comune']);
+            $this->ensureBoosterColumns($p['table']);
+
+            $updated = DB::table($p['table'])->whereIn('id', $p['ids'])->update(['lavorato' => $lavorato]);
+
+            return response()->json(['ok' => true, 'updated' => $updated, 'lavorato' => $lavorato]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Elimina definitivamente una o piu' righe dalla tabella di elaborazione. */
+    public function eliminaRighe(Request $request)
+    {
+        try {
+            $p = $this->parseRigheRequest($request);
+            if (isset($p['error'])) {
+                return response()->json(['error' => $p['error']], $p['status']);
+            }
+
+            $this->setDB($p['code_comune']);
+            $this->ensureBoosterColumns($p['table']);
+
+            $deleted = DB::table($p['table'])->whereIn('id', $p['ids'])->delete();
+
+            return response()->json(['ok' => true, 'deleted' => $deleted]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Prepara la tabella di elaborazione: aggiunge le colonne 'id' e 'lavorato'
+     * se mancanti (retroattivo). Chiamato dal frontend all'apertura del dettaglio.
+     */
+    public function preparaTabella(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            $table       = $request->input('table');
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+                return response()->json(['error' => 'Nome tabella non valido'], 400);
+            }
+
+            $this->setDB($code_comune);
+            $this->ensureBoosterColumns($table);
+
+            return response()->json(['ok' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
+        }
     }
 }
