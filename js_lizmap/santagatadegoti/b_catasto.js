@@ -764,7 +764,7 @@ function openLayer(rowData) {
 
     foglioSelect.val(foglioValue);
     foglioInput.val(foglioSelect.find('option:selected').text());
-    // foglioSelect.trigger('change');
+    foglioSelect.trigger('change');
 
     setTimeout(() => {
         const particellaSelect = $('#locate-layer-' + comune + '_catasto');
@@ -773,7 +773,6 @@ function openLayer(rowData) {
         const particellaText = particella; // La particella che vuoi selezionare (in questo caso "25")
     
         // Trova tutte le opzioni con il testo corrispondente a particellaText
-        console.log(particellaSelect)
         const particellaOptions = particellaSelect.find('option').filter(function () {
             return $(this).text() === particellaText;
         });
