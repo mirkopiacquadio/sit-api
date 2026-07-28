@@ -1140,13 +1140,15 @@ class BoosterController extends Controller
                 LEFT JOIN {$edifici} b ON ST_Intersects(a.geom, b.geom)
                 GROUP BY a.gid, a.descr, a.geom");
 
-            // SUB FASE 2: intersezione col catasto originale per FOGLIO/PARTICELLA
+            // SUB FASE 2: intersezione con le sole PARTICELLE del catasto per
+            // ricavare FOGLIO/PARTICELLA (gli EDIFICI non hanno questi campi).
             DB::statement("DROP TABLE IF EXISTS edifici_fantasma_tmp CASCADE");
             DB::statement("CREATE TABLE edifici_fantasma_tmp AS
                 SELECT e.gid AS id_edificio, e.descr, e.tipo_fantasma, c.\"FOGLIO\", c.\"PARTICELLA\",
                     ST_Multi(ST_CollectionExtract(ST_Intersection(e.geom, c.geom), 3)) AS geom
                 FROM edifici_fantasma_base e
                 JOIN {$catasto} c ON e.geom && c.geom AND ST_Intersects(e.geom, c.geom)
+                    AND c.\"TIPOLOGIA\" = 'PARTICELLA'
                 WHERE NOT ST_IsEmpty(ST_CollectionExtract(ST_Intersection(e.geom, c.geom), 3))");
 
             // SUB FASE 4 + area + filtro soglie -> tabella finale con poligoni singoli
