@@ -118,6 +118,8 @@ lizMap.events.on({
             cursor: pointer !important;
         }
         /* Riga marcata come "lavorato" */
+        /* Riga selezionata (ultima cliccata) — grigia. Il verde "lavorato" ha la precedenza. */
+        tr.booster-selezionata > td { background: #e2e3e5 !important; }
         tr.booster-lavorato > td { background: #d4edda !important; }
         /* Switch "lavorato" del dettaglio Booster */
         .booster-switch { position: relative; display: inline-block; width: 38px; height: 20px; vertical-align: middle; }
@@ -380,7 +382,7 @@ function renderBoosterDettaglio() {
         const statoText = row.STATO === 'EDIFICATA' ? 'color:#000;' : 'color:white;';
         const lavorato = String(row.lavorato) === '1';
 
-        html += `<tr class="${lavorato ? 'booster-lavorato' : ''}" style="cursor:pointer;" onclick="apriDaBooster('${foglio}', '${particella}')">
+        html += `<tr class="${lavorato ? 'booster-lavorato' : ''}" style="cursor:pointer;" onclick="apriDaBooster('${foglio}', '${particella}', this)">
                     <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="booster-row-check" value="${row.id}" onchange="aggiornaContatoreSelezione()"></td>
                     <td style="text-align:center;" onclick="event.stopPropagation()">
                         <label class="booster-switch"><input type="checkbox" ${lavorato ? 'checked' : ''} onchange="toggleLavoratoRiga('${row.id}', this.checked, this)"><span></span></label>
@@ -407,7 +409,15 @@ function renderBoosterDettaglio() {
     document.getElementById('booster-dettaglio-content').innerHTML = html;
 }
 
-function apriDaBooster(foglio, particella) {
+function apriDaBooster(foglio, particella, tr) {
+    // Evidenzia in grigio la riga cliccata (selezione singola): spegne la
+    // precedente e accende la nuova. Il verde "lavorato" resta prioritario.
+    if (tr) {
+        document.querySelectorAll('#booster-dettaglio-content tr.booster-selezionata')
+            .forEach(r => r.classList.remove('booster-selezionata'));
+        tr.classList.add('booster-selezionata');
+    }
+
     var rowData = {
         foglio: foglio,
         numero: particella,
