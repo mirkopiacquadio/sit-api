@@ -59,17 +59,12 @@ lizMap.events.on({
     const style = document.createElement('style');
     style.id = 'booster-modal-style';
     style.textContent = `
-        #booster-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1955;
-        }
         body.booster-modal-open #mini-dock {
             position: fixed !important;
-            top: 50% !important;
-            left: 50% !important;
-            transform: translate(-50%, -50%) !important;
+            top: 0 !important;
+            right: 0 !important;
+            left: auto !important;
+            transform: none !important;
             width: min(1250px, 94vw) !important;
             height: min(880px, 92vh) !important;
             max-width: 94vw !important;
@@ -137,25 +132,14 @@ lizMap.events.on({
 
 function apriBoosterModal() {
     document.body.classList.add('booster-modal-open');
-
-    if (!document.getElementById('booster-backdrop')) {
-        const backdrop = document.createElement('div');
-        backdrop.id = 'booster-backdrop';
-        backdrop.addEventListener('click', chiudiBoosterModal);
-        document.body.appendChild(backdrop);
-    }
-
+    // Nessun backdrop: la mappa sotto resta visibile e interagibile (pan/zoom).
     document.addEventListener('keydown', boosterEscHandler);
 }
 
-// Ripristina soltanto la UI del modale (classe + backdrop + listener),
+// Ripristina soltanto la UI del modale (classe + listener),
 // senza interagire con lo stato del minidock di Lizmap.
 function chiudiBoosterModalUI() {
     document.body.classList.remove('booster-modal-open');
-
-    const backdrop = document.getElementById('booster-backdrop');
-    if (backdrop) backdrop.remove();
-
     document.removeEventListener('keydown', boosterEscHandler);
 }
 
