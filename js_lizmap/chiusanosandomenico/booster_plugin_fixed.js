@@ -117,7 +117,6 @@ lizMap.events.on({
             z-index: 10 !important;
             cursor: pointer !important;
         }
-        /* Riga marcata come "lavorato" */
         /* Riga selezionata (ultima cliccata) — grigia. Il verde "lavorato" ha la precedenza. */
         tr.booster-selezionata > td { background: #e2e3e5 !important; }
         tr.booster-lavorato > td { background: #d4edda !important; }
@@ -383,9 +382,9 @@ function renderBoosterDettaglio() {
         const lavorato = String(row.lavorato) === '1';
 
         html += `<tr class="${lavorato ? 'booster-lavorato' : ''}" style="cursor:pointer;" onclick="apriDaBooster('${foglio}', '${particella}', this)">
-                    <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="booster-row-check" value="${row.id}" onchange="aggiornaContatoreSelezione()"></td>
+                    <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="booster-row-check" value="${row.gid}" onchange="aggiornaContatoreSelezione()"></td>
                     <td style="text-align:center;" onclick="event.stopPropagation()">
-                        <label class="booster-switch"><input type="checkbox" ${lavorato ? 'checked' : ''} onchange="toggleLavoratoRiga('${row.id}', this.checked, this)"><span></span></label>
+                        <label class="booster-switch"><input type="checkbox" ${lavorato ? 'checked' : ''} onchange="toggleLavoratoRiga('${row.gid}', this.checked, this)"><span></span></label>
                     </td>
                     <td><strong>${foglio}</strong></td>
                     <td><strong>${particella}</strong></td>
@@ -461,7 +460,7 @@ function toggleSelectAllBooster(master) {
 // Aggiorna localmente il valore lavorato nelle righe in memoria.
 function aggiornaLavoratoLocale(ids, val) {
     const set = new Set(ids.map(String));
-    window.boosterRows.forEach(r => { if (set.has(String(r.id))) r.lavorato = val; });
+    window.boosterRows.forEach(r => { if (set.has(String(r.gid))) r.lavorato = val; });
 }
 
 function toggleLavoratoRiga(id, checked, input) {
@@ -522,7 +521,7 @@ function eliminaRigheSelezionate() {
         .then(res => {
             if (res && res.ok) {
                 const set = new Set(ids.map(String));
-                window.boosterRows = window.boosterRows.filter(r => !set.has(String(r.id)));
+                window.boosterRows = window.boosterRows.filter(r => !set.has(String(r.gid)));
                 const totalPages = Math.max(1, Math.ceil(window.boosterRows.length / window.rowsPerPage));
                 if (window.currentPage > totalPages) window.currentPage = totalPages;
                 renderBoosterDettaglio();

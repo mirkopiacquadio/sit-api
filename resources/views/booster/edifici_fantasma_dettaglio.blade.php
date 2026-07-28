@@ -101,15 +101,15 @@
                     <tbody>
                         @forelse($rows as $row)
                             @php $subData = json_decode($row->sub_data ?? '[]', true) ?: []; @endphp
-                            <tr class="{{ $row->lavorato ? 'riga-lavorata' : '' }}" data-row-id="{{ $row->id }}">
+                            <tr class="{{ $row->lavorato ? 'riga-lavorata' : '' }}" data-row-id="{{ $row->gid }}">
                                 <td style="text-align:center;">
-                                    <input type="checkbox" class="row-check" value="{{ $row->id }}" onchange="updateSelCount()">
+                                    <input type="checkbox" class="row-check" value="{{ $row->gid }}" onchange="updateSelCount()">
                                 </td>
                                 <td style="text-align:center;">
                                     <div class="form-check form-switch d-flex justify-content-center m-0">
                                         <input class="form-check-input" type="checkbox" role="switch"
                                                {{ $row->lavorato ? 'checked' : '' }}
-                                               onchange="toggleLavorato({{ $row->id }}, this.checked, this)">
+                                               onchange="toggleLavorato({{ $row->gid }}, this.checked, this)">
                                     </div>
                                 </td>
                                 <td><strong>{{ $row->FOGLIO }}</strong></td>

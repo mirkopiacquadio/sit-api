@@ -634,7 +634,7 @@ class BoosterController extends Controller
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
             // Campo di lavorazione (0/1) e identita' di riga stabile.
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
-            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN id bigserial");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN gid serial PRIMARY KEY");
             Log::info("BOOSTER STEP 11b: ALTER TABLE OK");
 
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
@@ -765,7 +765,7 @@ class BoosterController extends Controller
         $this->setDB($code_comune);
         $this->ensureBoosterColumns($table);
 
-        $rows = DB::select("SELECT id, lavorato, \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
+        $rows = DB::select("SELECT gid, lavorato, \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
         return response()->json($rows);
     }
@@ -792,13 +792,23 @@ class BoosterController extends Controller
             DB::statement("ALTER TABLE {$table} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
         }
 
+        // Chiave di riga 'gid' come integer (int4): QGIS Server NON accetta
+        // un campo bigint (int8) come chiave primaria. Migra anche le tabelle
+        // vecchie che avevano 'id bigserial': droppa 'id' e crea 'gid serial'.
+        $hasGid = DB::selectOne(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'gid'",
+            [$table]
+        );
         $hasId = DB::selectOne(
             "SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'id'",
             [$table]
         );
-        if (!$hasId) {
-            // bigserial: assegna un id univoco a tutte le righe gia' presenti
-            DB::statement("ALTER TABLE {$table} ADD COLUMN id bigserial");
+        if ($hasId) {
+            DB::statement("ALTER TABLE {$table} DROP COLUMN id");
+        }
+        if (!$hasGid) {
+            // serial (int4) + PRIMARY KEY: assegna un gid univoco alle righe esistenti
+            DB::statement("ALTER TABLE {$table} ADD COLUMN gid serial PRIMARY KEY");
         }
     }
 
@@ -843,7 +853,7 @@ class BoosterController extends Controller
             $this->setDB($p['code_comune']);
             $this->ensureBoosterColumns($p['table']);
 
-            $updated = DB::table($p['table'])->whereIn('id', $p['ids'])->update(['lavorato' => $lavorato]);
+            $updated = DB::table($p['table'])->whereIn('gid', $p['ids'])->update(['lavorato' => $lavorato]);
 
             return response()->json(['ok' => true, 'updated' => $updated, 'lavorato' => $lavorato]);
         } catch (\Exception $e) {
@@ -863,7 +873,7 @@ class BoosterController extends Controller
             $this->setDB($p['code_comune']);
             $this->ensureBoosterColumns($p['table']);
 
-            $deleted = DB::table($p['table'])->whereIn('id', $p['ids'])->delete();
+            $deleted = DB::table($p['table'])->whereIn('gid', $p['ids'])->delete();
 
             return response()->json(['ok' => true, 'deleted' => $deleted]);
         } catch (\Exception $e) {
@@ -1165,7 +1175,7 @@ class BoosterController extends Controller
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN catasto_tipo TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
             DB::statement("ALTER TABLE {$finalTable} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
-            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN id bigserial");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN gid serial PRIMARY KEY");
 
             DB::statement("DROP TABLE IF EXISTS edifici_fantasma_base CASCADE");
             DB::statement("DROP TABLE IF EXISTS edifici_fantasma_tmp CASCADE");
