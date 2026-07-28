@@ -1198,7 +1198,9 @@ class BoosterController extends Controller
                 return response()->json(['error' => 'Codice comune non valido'], 400);
             }
             $this->setDB($code_comune);
-            $tables = DB::select("SELECT tablename FROM pg_tables WHERE tablename LIKE 'edifici_fantasma_finali_%' ORDER BY tablename DESC");
+            // Solo le elaborazioni "datate" (edifici_fantasma_finali_gg_mm_aaaa[_hh_mm]);
+            // esclude tabelle intermedie/manuali come edifici_fantasma_finali_poly*.
+            $tables = DB::select("SELECT tablename FROM pg_tables WHERE tablename ~ '^edifici_fantasma_finali_[0-9]{2}_[0-9]{2}_[0-9]{4}(_[0-9]{2}_[0-9]{2})?$' ORDER BY tablename DESC");
             return response()->json(array_map(fn($t) => $t->tablename, $tables));
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
