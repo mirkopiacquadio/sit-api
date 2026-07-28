@@ -62,4 +62,15 @@ Route::prefix('api/monter/booster')->name('booster.')->group(function () {
     Route::get('/errori-urbanistica/{code_comune}', [BoosterController::class, 'erroriUrbanistica'])->name('errori.urbanistica');
     Route::get('/errori-catasto-count/{code_comune}', [BoosterController::class, 'erroriCatastoNumber'])->name('errori.catasto.count');
     Route::get('/errori-urbanistica-count/{code_comune}', [BoosterController::class, 'erroriUrbanisticaNumber'])->name('errori.urbanistica.count');
+
+    // Edifici Fantasma — pipeline FASE 1..5
+    Route::post('/ef/fase1-ctr', [BoosterController::class, 'efFase1Ctr'])->name('ef.fase1');
+    Route::post('/ef/elimina-3d', [BoosterController::class, 'efEliminaRecord3D'])->name('ef.elimina3d');
+    Route::post('/ef/fase2-catasto', [BoosterController::class, 'efFase2Catasto'])->name('ef.fase2');
+    Route::post('/ef/verifica-poligoni', [BoosterController::class, 'efVerificaPoligoni'])->name('ef.verifica');
+    Route::post('/ef/elabora', [BoosterController::class, 'efElabora'])->name('ef.elabora');
+    Route::get('/ef/elaborazioni/{code_comune}', [BoosterController::class, 'efElaborazioni'])->name('ef.elaborazioni');
+    Route::get('/ef/dettaglio/{code_comune}/{table}', [BoosterController::class, 'efDettaglio'])->name('ef.dettaglio');
+    Route::get('/ef/download/{code_comune}/{table}', [BoosterController::class, 'efDownload'])->name('ef.download');
+    Route::delete('/ef/elimina/{code_comune}/{table}', [BoosterController::class, 'efElimina'])->name('ef.elimina');
 });

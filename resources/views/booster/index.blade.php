@@ -79,6 +79,11 @@
             padding: 1.25rem 1.5rem;
             color: white;
             font-weight: 500;
+            cursor: pointer;
+        }
+
+        .menu-item:not(.disabled):hover {
+            background: rgba(52, 152, 219, 0.15);
         }
 
         .menu-item.active {
@@ -191,10 +196,10 @@
             <li class="menu-item">
                 <div class="menu-label">TARIFFARIO</div>
             </li>
-            <li class="menu-item active">
+            <li class="menu-item active" id="menu-aree" onclick="showSection('aree')">
                 <div class="menu-label">AREE EDIFICABILI</div>
             </li>
-            <li class="menu-item disabled">
+            <li class="menu-item" id="menu-ef" onclick="showSection('edifici-fantasma')">
                 <div class="menu-label">EDIFICI FANTASMA</div>
             </li>
             <li class="menu-item disabled">
@@ -217,8 +222,8 @@
 
     <div class="main-content">
         <div class="page-header">
-            <h1 class="mb-2">Elaborazione Zone Territoriali Omogenee</h1>
-            <p class="text-muted mb-0">Sistema di analisi e gestione aree edificabili</p>
+            <h1 class="mb-2" id="pageTitle">Elaborazione Zone Territoriali Omogenee</h1>
+            <p class="text-muted mb-0" id="pageSubtitle">Sistema di analisi e gestione aree edificabili</p>
         </div>
 
         <div id="comuneWarning" class="alert alert-warning">
@@ -233,6 +238,8 @@
 
         <div id="mainContent" style="display: none;">
             <div id="messages"></div>
+
+            <div id="section-aree">
 
             {{-- Banner job in corso --}}
             <div id="jobBanner" class="alert alert-info d-none align-items-center gap-3 mb-3 py-3 px-4 shadow-sm" role="alert">
@@ -322,6 +329,102 @@
                     </div>
                 </div>
             </div>
+            </div> {{-- /section-aree --}}
+
+            {{-- ============================ EDIFICI FANTASMA ============================ --}}
+            <div id="section-edifici-fantasma" style="display:none;">
+                <div id="ef-messages"></div>
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header bg-white">
+                                <i class="bi bi-diagram-3 me-2"></i>Preparazione Cartografie di Base
+                            </div>
+                            <div class="card-body">
+
+                                {{-- FASE 1 - CTR --}}
+                                <div class="mb-4 p-3" style="border:1px solid #e9ecef;border-radius:8px;">
+                                    <div class="fw-semibold mb-3"><span class="badge bg-primary me-2">FASE 1</span>CTR</div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Nome tabella CTR</label>
+                                        <input type="text" class="form-control" id="efCtrTable" placeholder="es. ctr_2026_pol">
+                                        <div class="form-text">Nome esatto della tabella CTR nel database (verrà verificato).</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Codici layer edifici (CSV)</label>
+                                        <input type="file" class="form-control" id="efCsv" accept=".csv,.txt">
+                                        <div class="form-text" id="efCsvInfo">Carica il CSV con i codici <code>descr</code> da estrarre.</div>
+                                    </div>
+                                    <button class="btn btn-primary" id="efBtnFase1" onclick="efFase1()"><i class="bi bi-gear me-1"></i>Elabora CTR</button>
+                                    <div id="efFase1Result" class="mt-3"></div>
+                                </div>
+
+                                {{-- FASE 2 - CATASTO --}}
+                                <div class="mb-4 p-3" style="border:1px solid #e9ecef;border-radius:8px;">
+                                    <div class="fw-semibold mb-3"><span class="badge bg-primary me-2">FASE 2</span>Catasto</div>
+                                    <div class="form-text mb-2">Crea <code>&lt;comune&gt;_catasto_edifici</code> con i soli poligoni EDIFICIO.</div>
+                                    <button class="btn btn-primary" id="efBtnFase2" onclick="efFase2()"><i class="bi bi-gear me-1"></i>Elabora Catasto</button>
+                                    <div id="efFase2Result" class="mt-3"></div>
+                                </div>
+
+                                {{-- FASE 3 - VERIFICA --}}
+                                <div class="errori-panel mb-4">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <strong><i class="bi bi-exclamation-circle me-2"></i>Verifica Poligoni</strong>
+                                            <small class="text-muted ms-2">FASE 3 — validità geometrie</small>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-warning" onclick="efVerifica('catasto')"><i class="bi bi-map me-1"></i>Verifica Catasto</button>
+                                            <button class="btn btn-sm btn-warning" onclick="efVerifica('ctr')"><i class="bi bi-layers me-1"></i>Verifica CTR</button>
+                                        </div>
+                                    </div>
+                                    <div id="efVerificaResult" class="mt-2" style="display:none;"></div>
+                                </div>
+
+                                {{-- FASE 4 - PARAMETRI + ELABORA --}}
+                                <div class="mb-2 p-3" style="border:1px solid #e9ecef;border-radius:8px;">
+                                    <div class="fw-semibold mb-3"><span class="badge bg-primary me-2">FASE 4</span>Parametri di Elaborazione</div>
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Ampliamenti: da 0 a … mq</label>
+                                            <input type="number" min="0" step="0.01" class="form-control" id="efAmplMax" value="0">
+                                            <div class="form-text">Esclude gli ampliamenti sotto questa soglia (0 = nessun filtro).</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Nuova edificazione: da 0 a … mq</label>
+                                            <input type="number" min="0" step="0.01" class="form-control" id="efNuovaMax" value="0">
+                                            <div class="form-text">Esclude le nuove edificazioni sotto questa soglia (0 = nessun filtro).</div>
+                                        </div>
+                                    </div>
+                                    <div class="form-check mb-3" style="background:#fff3cd;border:1px solid #ffc107;">
+                                        <input class="form-check-input" type="checkbox" id="efSoloNuova">
+                                        <label class="form-check-label fw-semibold" for="efSoloNuova" style="color:#856404;">Solo nuova edificazione</label>
+                                    </div>
+                                    <button class="btn btn-primary btn-professional" id="efBtnElabora" onclick="efElabora()"><i class="bi bi-gear me-2"></i>Elabora</button>
+                                    <div id="efElaboraResult" class="mt-3"></div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header bg-white">
+                                <i class="bi bi-folder me-2"></i>Elaborazioni Archiviate
+                            </div>
+                            <div id="efElaborazioniList">
+                                <div class="text-center text-muted py-5">
+                                    <i class="bi bi-inbox" style="font-size:3rem;opacity:0.3;"></i>
+                                    <p class="mt-3 mb-0">Nessuna elaborazione disponibile</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{-- ========================== /EDIFICI FANTASMA ========================== --}}
         </div>
     </div>
 
@@ -375,6 +478,11 @@
 
                 document.getElementById('loadingSpinner').classList.remove('active');
                 document.getElementById('mainContent').style.display = 'block';
+
+                // Se sono sulla sezione Edifici Fantasma, aggiorno anche la sua lista.
+                if (document.getElementById('section-edifici-fantasma').style.display !== 'none') {
+                    efLoadElaborazioni(comuneCode);
+                }
             } catch (error) {
                 showMessage('Errore durante il caricamento dei dati', 'danger');
                 document.getElementById('loadingSpinner').classList.remove('active');
@@ -641,6 +749,223 @@
             alert.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
             container.appendChild(alert);
             setTimeout(() => alert.remove(), 6000);
+        }
+
+        // ===================== SEZIONI (menu laterale) =====================
+        function showSection(sec) {
+            const isAree = sec === 'aree';
+            document.getElementById('section-aree').style.display = isAree ? 'block' : 'none';
+            document.getElementById('section-edifici-fantasma').style.display = isAree ? 'none' : 'block';
+            document.getElementById('menu-aree').classList.toggle('active', isAree);
+            document.getElementById('menu-ef').classList.toggle('active', !isAree);
+            document.getElementById('pageTitle').textContent = isAree ? 'Elaborazione Zone Territoriali Omogenee' : 'Edifici Fantasma';
+            document.getElementById('pageSubtitle').textContent = isAree
+                ? 'Sistema di analisi e gestione aree edificabili'
+                : 'Confronto CTR / Catasto per individuare edifici non accatastati';
+            if (!isAree && currentComune) efLoadElaborazioni(currentComune);
+        }
+
+        // ===================== EDIFICI FANTASMA =====================
+        let efCodici = [];
+        document.getElementById('efCsv').addEventListener('change', function () {
+            const file = this.files[0];
+            const info = document.getElementById('efCsvInfo');
+            if (!file) { efCodici = []; return; }
+            const reader = new FileReader();
+            reader.onload = e => {
+                efCodici = e.target.result.split(/[\r\n,;]+/).map(s => s.trim()).filter(s => s !== '');
+                info.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>${efCodici.length} codici caricati.</span>`;
+            };
+            reader.readAsText(file);
+        });
+
+        function efAlert(msg, type) {
+            return `<div class="alert alert-${type} mb-0 py-2"><i class="bi bi-info-circle me-2"></i>${msg}</div>`;
+        }
+
+        function efPost(url, payload, btn, loadingText) {
+            let prev;
+            if (btn) { prev = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${loadingText || 'Elaborazione...'}`; }
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = prev; } });
+        }
+
+        // FASE 1 - CTR
+        function efFase1() {
+            if (!currentComune) return alert('Seleziona un comune.');
+            const ctr = document.getElementById('efCtrTable').value.trim();
+            if (!ctr) return alert('Inserisci il nome della tabella CTR.');
+            if (!efCodici.length) return alert('Carica il CSV dei codici edifici.');
+            const box = document.getElementById('efFase1Result');
+            box.innerHTML = '';
+            efPost('/api/monter/booster/ef/fase1-ctr',
+                { code_comune: currentComune, nome_tabella_ctr: ctr, codici: efCodici },
+                document.getElementById('efBtnFase1'), 'Elaboro CTR...')
+                .then(res => {
+                    if (res.error) { box.innerHTML = efAlert(res.error, 'danger'); return; }
+                    if (res.has3D) {
+                        box.innerHTML = efAlert(`${res.message} — 3D: ${res.count3d}, 2D: ${res.count2d}`, 'warning') + efRender3D(res.records3D);
+                    } else {
+                        box.innerHTML = efAlert(`${res.message} — 3D: ${res.count3d}, 2D: ${res.count2d}`, 'success');
+                    }
+                }).catch(() => box.innerHTML = efAlert('Errore di rete', 'danger'));
+        }
+
+        function efRender3D(records) {
+            const rows = records.map(r => `<tr><td><input type="checkbox" class="ef-3d-check" value="${r.gid}"></td><td>${r.gid}</td><td>${r.descr ?? ''}</td></tr>`).join('');
+            return `<div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong class="text-danger">Record 3D residui — vanno verificati/eliminati</strong>
+                    <button class="btn btn-sm btn-danger" onclick="efElimina3D()"><i class="bi bi-trash me-1"></i>Elimina selezionati</button>
+                </div>
+                <div style="max-height:220px;overflow:auto;"><table class="table table-sm table-bordered mb-0">
+                <thead><tr><th style="width:34px;"><input type="checkbox" onclick="document.querySelectorAll('.ef-3d-check').forEach(c=>c.checked=this.checked)"></th><th>gid</th><th>descr</th></tr></thead>
+                <tbody>${rows}</tbody></table></div></div>`;
+        }
+
+        function efElimina3D() {
+            const gids = Array.from(document.querySelectorAll('.ef-3d-check:checked')).map(c => parseInt(c.value, 10));
+            if (!gids.length) return alert('Seleziona i record da eliminare.');
+            if (!confirm(`Eliminare ${gids.length} record 3D?`)) return;
+            const box = document.getElementById('efFase1Result');
+            efPost('/api/monter/booster/ef/elimina-3d', { code_comune: currentComune, gids })
+                .then(res => {
+                    if (res.error) { alert(res.error); return; }
+                    if (res.has3D) {
+                        box.innerHTML = efAlert(`Eliminati ${res.deleted}. Restano ${res.records3D.length} record 3D.`, 'warning') + efRender3D(res.records3D);
+                    } else {
+                        box.innerHTML = efAlert(`Eliminati ${res.deleted}. Nessun record 3D residuo: puoi procedere.`, 'success');
+                    }
+                });
+        }
+
+        // FASE 2 - CATASTO
+        function efFase2() {
+            if (!currentComune) return alert('Seleziona un comune.');
+            const box = document.getElementById('efFase2Result'); box.innerHTML = '';
+            efPost('/api/monter/booster/ef/fase2-catasto', { code_comune: currentComune },
+                document.getElementById('efBtnFase2'), 'Elaboro Catasto...')
+                .then(res => box.innerHTML = res.error ? efAlert(res.error, 'danger') : efAlert(res.message, 'success'))
+                .catch(() => box.innerHTML = efAlert('Errore di rete', 'danger'));
+        }
+
+        // FASE 3 - VERIFICA
+        function efVerifica(tipo) {
+            if (!currentComune) return alert('Seleziona un comune.');
+            const box = document.getElementById('efVerificaResult');
+            box.style.display = 'block';
+            box.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Verifica...';
+            efPost('/api/monter/booster/ef/verifica-poligoni', { code_comune: currentComune, tipo })
+                .then(res => {
+                    if (res.error) { box.innerHTML = efAlert(res.error, 'danger'); return; }
+                    const lab = tipo.toUpperCase();
+                    if (res.count === 0) box.innerHTML = efAlert(`${lab}: nessun poligono con errori geometrici.`, 'success');
+                    else box.innerHTML = efAlert(`${lab}: ${res.count} poligoni con errori geometrici.`, 'danger') + efRenderInvalidi(res.invalidi, tipo);
+                }).catch(() => box.innerHTML = efAlert('Errore di rete', 'danger'));
+        }
+
+        function efRenderInvalidi(rows, tipo) {
+            const head = tipo === 'catasto' ? '<th>gid</th><th>FOGLIO</th><th>PARTICELLA</th><th>errore</th>' : '<th>gid</th><th>descr</th><th>errore</th>';
+            const body = (rows || []).slice(0, 200).map(r => tipo === 'catasto'
+                ? `<tr><td>${r.gid}</td><td>${r.FOGLIO ?? ''}</td><td>${r.PARTICELLA ?? ''}</td><td>${r.errore ?? ''}</td></tr>`
+                : `<tr><td>${r.gid}</td><td>${r.descr ?? ''}</td><td>${r.errore ?? ''}</td></tr>`).join('');
+            return `<div class="mt-2" style="max-height:220px;overflow:auto;"><table class="table table-sm table-bordered mb-0"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+        }
+
+        // FASE 4 + 5 - ELABORA
+        function efElabora() {
+            if (!currentComune) return alert('Seleziona un comune.');
+            const box = document.getElementById('efElaboraResult'); box.innerHTML = '';
+            const payload = {
+                code_comune: currentComune,
+                ampliamenti_max: parseFloat(document.getElementById('efAmplMax').value) || 0,
+                nuova_edif_max: parseFloat(document.getElementById('efNuovaMax').value) || 0,
+                solo_nuova_edificazione: document.getElementById('efSoloNuova').checked
+            };
+            efPost('/api/monter/booster/ef/elabora', payload, document.getElementById('efBtnElabora'), 'Elaboro...')
+                .then(res => {
+                    if (res.error) { box.innerHTML = efAlert(res.error, 'danger'); return; }
+                    box.innerHTML = efAlert(`${res.message} (${res.count} poligoni, SRID ${res.srid}). Proprietari in background.`, 'success');
+                    efLoadElaborazioni(currentComune);
+                    if (res.table) efPollJob(res.table);
+                }).catch(() => box.innerHTML = efAlert('Errore di rete', 'danger'));
+        }
+
+        // Polling del job proprietari per gli edifici fantasma.
+        function efPollJob(table) {
+            const box = document.getElementById('efElaboraResult');
+            let unknownTries = 0;
+            const poll = () => {
+                fetch(`/api/monter/booster/jobStatus?table=${table}`)
+                    .then(r => r.json())
+                    .then(s => {
+                        const st = s.status || 'unknown';
+                        if (st === 'running') {
+                            const perc = s.total > 0 ? Math.round((s.processed / s.total) * 100) : 0;
+                            box.innerHTML = efAlert(`Proprietari in corso: ${s.processed ?? 0}/${s.total ?? 0} (${perc}%)`, 'info');
+                            setTimeout(poll, 3000);
+                        } else if (st === 'unknown' && unknownTries < 10) {
+                            unknownTries++;
+                            setTimeout(poll, 3000);
+                        } else if (st === 'error') {
+                            box.innerHTML = efAlert('Errore durante il popolamento proprietari.', 'danger');
+                        } else if (st === 'completed') {
+                            box.innerHTML = efAlert('Elaborazione completata: proprietari popolati.', 'success');
+                            efLoadElaborazioni(currentComune);
+                        }
+                    })
+                    .catch(() => {});
+            };
+            setTimeout(poll, 2000);
+        }
+
+        function efFormatLabel(t) {
+            const raw = t.replace('edifici_fantasma_finali_', '');
+            const p = raw.split('_');
+            return p.length >= 5 ? `${p[0]}/${p[1]}/${p[2]} ore ${p[3]}:${p[4]}` : `${p[0]}/${p[1]}/${p[2]}`;
+        }
+
+        async function efLoadElaborazioni(code) {
+            try {
+                const res = await fetch(`/api/monter/booster/ef/elaborazioni/${code}`);
+                const list = await res.json();
+                const c = document.getElementById('efElaborazioniList');
+                if (!Array.isArray(list) || !list.length) {
+                    c.innerHTML = `<div class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:3rem;opacity:0.3;"></i><p class="mt-3 mb-0">Nessuna elaborazione disponibile</p></div>`;
+                    return;
+                }
+                c.innerHTML = '<div class="elaborazioni-list"></div>';
+                const box = c.querySelector('.elaborazioni-list');
+                list.forEach(t => {
+                    const d = document.createElement('div');
+                    d.className = 'elaborazione-item';
+                    d.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <a href="/api/monter/booster/ef/dettaglio/${code}/${t}" class="text-decoration-none fw-semibold text-dark d-block">
+                                <i class="bi bi-file-earmark-text me-2"></i>${efFormatLabel(t)}
+                            </a>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <a href="/api/monter/booster/ef/download/${code}/${t}" class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i></a>
+                            <button onclick="efDelete('${code}','${t}')" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </div>`;
+                    box.appendChild(d);
+                });
+            } catch (e) { console.error('Errore lista edifici fantasma:', e); }
+        }
+
+        async function efDelete(code, table) {
+            if (!confirm('Confermi l\'eliminazione di questa elaborazione?')) return;
+            try {
+                const res = await fetch(`/api/monter/booster/ef/elimina/${code}/${table}`, {
+                    method: 'DELETE', headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                });
+                const r = await res.json();
+                if (r.success) efLoadElaborazioni(code); else alert(r.error || 'Errore durante l\'eliminazione');
+            } catch (e) { alert('Errore durante l\'eliminazione'); }
         }
     </script>
 </body>

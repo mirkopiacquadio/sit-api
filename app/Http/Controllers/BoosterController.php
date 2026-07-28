@@ -557,21 +557,32 @@ class BoosterController extends Controller
                 return response()->json(['error' => 'Piano urbanistico non trovato'], 404);
             }
 
+            // Le AREE EDIFICABILI usano la copia editabile del catasto
+            // (<code>_catasto_base_aree_edif), non l'originale <code>_catasto.
+            // La copia va creata a mano dall'operatore (correzione poligoni).
+            $catastoAreeEdif = strtolower($code_comune) . '_catasto_base_aree_edif';
+            $existsBase = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [$catastoAreeEdif]);
+            if (!$existsBase || !$existsBase->ok) {
+                return response()->json([
+                    'error' => "Tabella '{$catastoAreeEdif}' non trovata. Va creata (copia editabile del catasto) prima di elaborare le aree edificabili."
+                ], 422);
+            }
+
             DB::statement("DROP TABLE IF EXISTS aree_edificabili_base CASCADE");
             DB::statement("DROP TYPE IF EXISTS aree_edificabili_base CASCADE");
             Log::info("BOOSTER STEP 5: DROP base OK");
 
             DB::statement("CREATE TABLE aree_edificabili_base AS
-            SELECT c.*, 
-                CASE 
-                    WHEN c.\"TIPOLOGIA\" = 'PARTICELLA' THEN 
+            SELECT c.*,
+                CASE
+                    WHEN c.\"TIPOLOGIA\" = 'PARTICELLA' THEN
                         CASE WHEN EXISTS (
-                            SELECT 1 FROM {$code_comune}_catasto e
+                            SELECT 1 FROM {$catastoAreeEdif} e
                             WHERE e.\"TIPOLOGIA\" = 'EDIFICIO' AND ST_Covers(c.geom, e.geom)
                         ) THEN 'EDIFICATA' ELSE 'LIBERA' END
                     ELSE 'NON_APPLICABILE_SOLO_EDIFICIO'
                 END AS \"STATO\"
-            FROM {$code_comune}_catasto c
+            FROM {$catastoAreeEdif} c
         ");
             Log::info("BOOSTER STEP 6: CREATE base OK");
 
@@ -648,7 +659,7 @@ class BoosterController extends Controller
     public function jobStatus(Request $request)
     {
         $table = $request->input('table');
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+        if (!$this->isBoosterTable($table)) {
             return response()->json(['error' => 'Nome tabella non valido'], 400);
         }
 
@@ -759,6 +770,13 @@ class BoosterController extends Controller
         return response()->json($rows);
     }
 
+    /** Valida il nome di una tabella elaborazione booster (aree edif o edifici fantasma). */
+    private function isBoosterTable($table)
+    {
+        return is_string($table)
+            && preg_match('/^(aree_edificabili_finali|edifici_fantasma_finali)_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table);
+    }
+
     /**
      * Assicura che la tabella di elaborazione abbia le colonne 'lavorato' e 'id'.
      * Serve per le tabelle create prima dell'introduzione di questi campi.
@@ -793,7 +811,7 @@ class BoosterController extends Controller
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
             return ['error' => 'Codice comune non valido', 'status' => 400];
         }
-        if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+        if (!$this->isBoosterTable($table)) {
             return ['error' => 'Nome tabella non valido', 'status' => 400];
         }
 
@@ -866,7 +884,7 @@ class BoosterController extends Controller
             if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
                 return response()->json(['error' => 'Codice comune non valido'], 400);
             }
-            if (!preg_match('/^aree_edificabili_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+            if (!$this->isBoosterTable($table)) {
                 return response()->json(['error' => 'Nome tabella non valido'], 400);
             }
 
@@ -876,6 +894,470 @@ class BoosterController extends Controller
             return response()->json(['ok' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Errore: ' . $e->getMessage()], 500);
+        }
+    }
+
+    // =======================================================================
+    // EDIFICI FANTASMA — pipeline (FASE 1..5) mappata dal PDF operativo.
+    // Naming: tabelle base per-comune (<code>_catasto, _catasto_edifici),
+    // tabelle intermedie generiche dentro il DB del comune, finale datata
+    // edifici_fantasma_finali_<data>. SRID rilevato dalla sorgente.
+    // =======================================================================
+
+    /** Rileva lo SRID delle geometrie di una tabella (fallback 32633 = UTM33N). */
+    private function detectSrid($table, $default = 32633)
+    {
+        try {
+            $r = DB::selectOne("SELECT ST_SRID(geom) AS srid FROM {$table} WHERE geom IS NOT NULL LIMIT 1");
+            return ($r && (int) $r->srid > 0) ? (int) $r->srid : $default;
+        } catch (\Throwable $e) {
+            return $default;
+        }
+    }
+
+    /**
+     * FASE 1 (CTR): estrae gli edifici dalla CTR (descr IN <codici CSV>),
+     * crea ctr_edifici_cartografia3d e la versione 2D, poi verifica i residui 3D.
+     * Se restano geometrie 3D si ferma e le riporta (decisione operatore).
+     */
+    public function efFase1Ctr(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            $ctr = $request->input('nome_tabella_ctr');
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            if (!$ctr || !preg_match('/^[a-zA-Z0-9_]+$/', $ctr)) {
+                return response()->json(['error' => 'Nome tabella CTR non valido'], 422);
+            }
+
+            $codici = $request->input('codici', []);
+            if (!is_array($codici)) {
+                $codici = preg_split('/[\r\n,;]+/', (string) $codici);
+            }
+            $codici = array_values(array_filter(array_map('trim', $codici), fn($v) => $v !== ''));
+            if (empty($codici)) {
+                return response()->json(['error' => 'Nessun codice edificio fornito (CSV vuoto)'], 422);
+            }
+
+            $this->setDB($code_comune);
+
+            $ctrExists = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [strtolower($ctr)]);
+            if (!$ctrExists || !$ctrExists->ok) {
+                return response()->json(['error' => "Tabella CTR '{$ctr}' non trovata nel database. Verifica il nome (possibile errore di battitura)."], 422);
+            }
+
+            $placeholders = implode(',', array_fill(0, count($codici), '?'));
+
+            // SUB FASE 1: estrazione 3D
+            DB::statement("DROP TABLE IF EXISTS ctr_edifici_cartografia3d CASCADE");
+            DB::statement("CREATE TABLE ctr_edifici_cartografia3d AS SELECT * FROM {$ctr} WHERE \"descr\" IN ({$placeholders})", $codici);
+
+            // SUB FASE 2: versione 2D
+            DB::statement("DROP TABLE IF EXISTS ctr_edifici_cartografia2d CASCADE");
+            DB::statement("CREATE TABLE ctr_edifici_cartografia2d AS SELECT gid, descr, ST_Force2D(geom) AS geom FROM ctr_edifici_cartografia3d");
+
+            $count3d = (int) DB::selectOne("SELECT COUNT(*) AS c FROM ctr_edifici_cartografia3d")->c;
+            $count2d = (int) DB::selectOne("SELECT COUNT(*) AS c FROM ctr_edifici_cartografia2d")->c;
+
+            // SUB FASE 3: verifica residui 3D
+            $records3D = DB::select("SELECT gid, descr FROM ctr_edifici_cartografia2d WHERE ST_NDims(geom) = 3 ORDER BY gid");
+            $has3D = count($records3D) > 0;
+
+            return response()->json([
+                'ok'        => !$has3D,
+                'has3D'     => $has3D,
+                'count3d'   => $count3d,
+                'count2d'   => $count2d,
+                'records3D' => $records3D,
+                'message'   => $has3D
+                    ? 'Ci sono ancora record 3D: vanno verificati/eliminati prima di procedere.'
+                    : 'FASE 1 completata: nessun record 3D residuo.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore FASE 1 (CTR): ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Elimina i record 3D indicati da ctr_edifici_cartografia2d e ricontrolla. */
+    public function efEliminaRecord3D(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            $gids = $request->input('gids', []);
+            if (!is_array($gids)) {
+                $gids = array_filter(explode(',', (string) $gids), fn($v) => $v !== '');
+            }
+            $gids = array_values(array_filter(array_map('intval', $gids), fn($v) => $v > 0));
+            if (empty($gids)) {
+                return response()->json(['error' => 'Nessun record selezionato'], 422);
+            }
+
+            $this->setDB($code_comune);
+            $deleted = DB::table('ctr_edifici_cartografia2d')->whereIn('gid', $gids)->delete();
+
+            $records3D = DB::select("SELECT gid, descr FROM ctr_edifici_cartografia2d WHERE ST_NDims(geom) = 3 ORDER BY gid");
+            return response()->json([
+                'ok'        => true,
+                'deleted'   => $deleted,
+                'has3D'     => count($records3D) > 0,
+                'records3D' => $records3D,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore eliminazione record 3D: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** FASE 2 (Catasto): crea <code>_catasto_edifici con i soli poligoni EDIFICIO. */
+    public function efFase2Catasto(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            $this->setDB($code_comune);
+
+            $catasto = strtolower($code_comune) . '_catasto';
+            $edifici = strtolower($code_comune) . '_catasto_edifici';
+
+            $exists = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [$catasto]);
+            if (!$exists || !$exists->ok) {
+                return response()->json(['error' => "Tabella '{$catasto}' non trovata."], 422);
+            }
+
+            DB::statement("DROP TABLE IF EXISTS {$edifici} CASCADE");
+            DB::statement("CREATE TABLE {$edifici} AS SELECT * FROM {$catasto} WHERE \"TIPOLOGIA\" = 'EDIFICIO'");
+            $count = (int) DB::selectOne("SELECT COUNT(*) AS c FROM {$edifici}")->c;
+
+            return response()->json([
+                'ok'      => true,
+                'table'   => $edifici,
+                'count'   => $count,
+                'message' => "FASE 2 completata: creata {$edifici} ({$count} edifici).",
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore FASE 2 (Catasto): ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** FASE 3: verifica validità poligoni (tipo = 'catasto' | 'ctr'). */
+    public function efVerificaPoligoni(Request $request)
+    {
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            $tipo = $request->input('tipo');
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            $this->setDB($code_comune);
+
+            if ($tipo === 'catasto') {
+                $table = strtolower($code_comune) . '_catasto_edifici';
+                $exists = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [$table]);
+                if (!$exists || !$exists->ok) {
+                    return response()->json(['error' => "Esegui prima la FASE 2 (manca {$table})."], 422);
+                }
+                $rows = DB::select("SELECT gid, \"FOGLIO\", \"PARTICELLA\", ST_IsValidReason(geom) AS errore FROM {$table} WHERE NOT ST_IsValid(geom) ORDER BY gid");
+            } elseif ($tipo === 'ctr') {
+                $table = 'ctr_edifici_cartografia2d';
+                $exists = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [$table]);
+                if (!$exists || !$exists->ok) {
+                    return response()->json(['error' => "Esegui prima la FASE 1 (manca {$table})."], 422);
+                }
+                $rows = DB::select("SELECT gid, descr, ST_IsValidReason(geom) AS errore FROM {$table} WHERE NOT ST_IsValid(geom) ORDER BY gid");
+            } else {
+                return response()->json(['error' => 'Tipo verifica non valido (catasto|ctr)'], 422);
+            }
+
+            return response()->json(['ok' => true, 'tipo' => $tipo, 'invalidi' => $rows, 'count' => count($rows)]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore verifica poligoni: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * FASE 4 + 5: genera edifici_fantasma_finali_<data> (differenza CTR/catasto,
+     * split in poligoni, area, filtro per soglie) e lancia il job proprietari.
+     */
+    public function efElabora(Request $request)
+    {
+        set_time_limit(0);
+        try {
+            $code_comune = strtoupper($request->input('code_comune'));
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+
+            $amplMax   = (float) $request->input('ampliamenti_max', 0);
+            $nuovaMax  = (float) $request->input('nuova_edif_max', 0);
+            $soloNuova = filter_var($request->input('solo_nuova_edificazione'), FILTER_VALIDATE_BOOLEAN);
+
+            $this->setDB($code_comune);
+
+            $catasto = strtolower($code_comune) . '_catasto';
+            $edifici = strtolower($code_comune) . '_catasto_edifici';
+
+            // Prerequisiti dalle fasi precedenti
+            foreach (['ctr_edifici_cartografia2d' => 'FASE 1', $edifici => 'FASE 2', $catasto => 'catasto'] as $t => $fase) {
+                $ex = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [$t]);
+                if (!$ex || !$ex->ok) {
+                    return response()->json(['error' => "Prerequisito mancante: tabella '{$t}' ({$fase}). Esegui prima le fasi precedenti."], 422);
+                }
+            }
+
+            $srid = $this->detectSrid($catasto);
+            $data = now()->format('d_m_Y_H_i');
+            $finalTable = "edifici_fantasma_finali_{$data}";
+
+            $exists = DB::selectOne("SELECT to_regclass(?) IS NOT NULL AS ok", [strtolower($finalTable)]);
+            if ($exists && $exists->ok) {
+                return response()->json(['error' => 'Elaborazione già presente per questo minuto. Attendere un minuto o eliminarla.'], 409);
+            }
+
+            // SUB FASE 1: base con differenza + classificazione tipo_fantasma
+            DB::statement("DROP TABLE IF EXISTS edifici_fantasma_base CASCADE");
+            DB::statement("CREATE TABLE edifici_fantasma_base AS
+                SELECT a.gid, a.descr,
+                    CASE WHEN COUNT(b.geom) = 0 THEN a.geom ELSE ST_Difference(a.geom, ST_Union(b.geom)) END AS geom,
+                    CASE WHEN COUNT(b.geom) > 0 THEN 'AMPLIAMENTO' ELSE 'NUOVA EDIFICAZIONE' END AS tipo_fantasma
+                FROM ctr_edifici_cartografia2d a
+                LEFT JOIN {$edifici} b ON ST_Intersects(a.geom, b.geom)
+                GROUP BY a.gid, a.descr, a.geom");
+
+            // SUB FASE 2: intersezione col catasto originale per FOGLIO/PARTICELLA
+            DB::statement("DROP TABLE IF EXISTS edifici_fantasma_tmp CASCADE");
+            DB::statement("CREATE TABLE edifici_fantasma_tmp AS
+                SELECT e.gid AS id_edificio, e.descr, e.tipo_fantasma, c.\"FOGLIO\", c.\"PARTICELLA\",
+                    ST_Multi(ST_CollectionExtract(ST_Intersection(e.geom, c.geom), 3)) AS geom
+                FROM edifici_fantasma_base e
+                JOIN {$catasto} c ON e.geom && c.geom AND ST_Intersects(e.geom, c.geom)
+                WHERE NOT ST_IsEmpty(ST_CollectionExtract(ST_Intersection(e.geom, c.geom), 3))");
+
+            // SUB FASE 4 + area + filtro soglie -> tabella finale con poligoni singoli
+            $filtro = "NOT (tipo_fantasma = 'AMPLIAMENTO' AND area_mq BETWEEN 0 AND {$amplMax})"
+                . " AND NOT (tipo_fantasma = 'NUOVA EDIFICAZIONE' AND area_mq BETWEEN 0 AND {$nuovaMax})";
+            if ($soloNuova) {
+                $filtro .= " AND tipo_fantasma = 'NUOVA EDIFICAZIONE'";
+            }
+
+            DB::statement("CREATE TABLE {$finalTable} AS
+                WITH dumped AS (
+                    SELECT id_edificio, descr, tipo_fantasma, \"FOGLIO\", \"PARTICELLA\", (ST_Dump(geom)).geom AS geom
+                    FROM edifici_fantasma_tmp
+                ),
+                poly AS (
+                    SELECT id_edificio, descr, tipo_fantasma, \"FOGLIO\", \"PARTICELLA\",
+                        ST_SetSRID(geom, {$srid})::geometry(Polygon, {$srid}) AS geom,
+                        ST_Area(geom) AS area_mq
+                    FROM dumped
+                    WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+                )
+                SELECT * FROM poly WHERE {$filtro}");
+
+            // FASE 5: colonne proprietari + lavorato/id (come aree edificabili)
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN proprietario TEXT");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN catasto_tipo TEXT");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN sub_data TEXT");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN lavorato smallint NOT NULL DEFAULT 0");
+            DB::statement("ALTER TABLE {$finalTable} ADD COLUMN id bigserial");
+
+            DB::statement("DROP TABLE IF EXISTS edifici_fantasma_base CASCADE");
+            DB::statement("DROP TABLE IF EXISTS edifici_fantasma_tmp CASCADE");
+
+            // Popolamento proprietari in background (stesso job delle aree edif)
+            \App\Jobs\AggiornaPropietariBooster::dispatch($finalTable, $code_comune);
+
+            $count = (int) DB::selectOne("SELECT COUNT(*) AS c FROM {$finalTable}")->c;
+
+            return response()->json([
+                'success' => true,
+                'table'   => $finalTable,
+                'date'    => $data,
+                'srid'    => $srid,
+                'count'   => $count,
+                'message' => 'Tabella edifici fantasma creata. I proprietari vengono popolati in background.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("EDIFICI FANTASMA ERRORE: " . $e->getMessage() . " in " . $e->getFile() . " linea " . $e->getLine());
+            return response()->json(['error' => 'Errore elaborazione edifici fantasma: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Elenco elaborazioni edifici fantasma (tabelle edifici_fantasma_finali_%). */
+    public function efElaborazioni($code_comune)
+    {
+        try {
+            $code_comune = strtoupper($code_comune);
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            $this->setDB($code_comune);
+            $tables = DB::select("SELECT tablename FROM pg_tables WHERE tablename LIKE 'edifici_fantasma_finali_%' ORDER BY tablename DESC");
+            return response()->json(array_map(fn($t) => $t->tablename, $tables));
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /** Elimina un'elaborazione edifici fantasma (drop della tabella). */
+    public function efElimina(Request $request, $code_comune = null, $table = null)
+    {
+        try {
+            $code_comune = strtoupper($code_comune ?? $request->get('code_comune'));
+            $table = $table ?? $request->get('table');
+
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return response()->json(['error' => 'Codice comune non valido'], 400);
+            }
+            if (!preg_match('/^edifici_fantasma_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+                return response()->json(['error' => 'Nome tabella non valido'], 400);
+            }
+
+            $this->setDB($code_comune);
+            DB::statement("DROP TABLE IF EXISTS {$table} CASCADE");
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore durante l\'eliminazione: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Pagina dettaglio (paginata + ordinabile) di un'elaborazione edifici fantasma. */
+    public function efDettaglio(Request $request, $code_comune, $table)
+    {
+        try {
+            $code_comune = strtoupper($code_comune);
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+                return redirect()->back()->with('error', 'Codice comune non valido');
+            }
+            if (!preg_match('/^edifici_fantasma_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+                return redirect()->back()->with('error', 'Nome tabella non valido');
+            }
+
+            $this->setDB($code_comune);
+            $this->ensureBoosterColumns($table);
+
+            $sortMap = [
+                'FOGLIO'        => '"FOGLIO"',
+                'PARTICELLA'    => '"PARTICELLA"',
+                'tipo_fantasma' => 'tipo_fantasma',
+                'descr'         => 'descr',
+                'area_mq'       => 'area_mq',
+            ];
+            $sort = $request->get('sort');
+            $dir  = strtolower($request->get('dir')) === 'desc' ? 'desc' : 'asc';
+
+            $query = DB::table($table);
+            if ($sort && isset($sortMap[$sort])) {
+                $col = $sortMap[$sort];
+                if ($sort === 'FOGLIO' || $sort === 'PARTICELLA') {
+                    $query->orderByRaw("lpad({$col}::text, 12, '0') {$dir}");
+                } else {
+                    $query->orderByRaw("{$col} {$dir}");
+                }
+                $query->orderByRaw('"FOGLIO", "PARTICELLA"');
+            } else {
+                $sort = null;
+                $dir  = 'asc';
+                $query->orderByRaw('"FOGLIO", "PARTICELLA"');
+            }
+
+            $rows = $query->paginate(50);
+
+            return view('booster.edifici_fantasma_dettaglio', compact('rows', 'code_comune', 'table', 'sort', 'dir'));
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Errore: ' . $e->getMessage());
+        }
+    }
+
+    /** Export CSV di un'elaborazione edifici fantasma (proprietari espansi in righe distinte). */
+    public function efDownload(Request $request, $code_comune = null, $table = null)
+    {
+        $code_comune = strtoupper($code_comune ?? $request->get('code_comune'));
+        $table = $table ?? $request->get('table');
+
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $code_comune)) {
+            return response()->json(['error' => 'Codice comune non valido'], 400);
+        }
+        if (!preg_match('/^edifici_fantasma_finali_\d{2}_\d{2}_\d{4}(_\d{2}_\d{2})?$/', $table)) {
+            return response()->json(['error' => 'Nome tabella non valido'], 400);
+        }
+
+        $this->setDB($code_comune);
+
+        try {
+            $fileName = "{$table}.csv";
+            $handle = fopen('php://temp', 'w+');
+
+            $rows = DB::select("SELECT * FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\"");
+
+            if (count($rows) > 0) {
+                $firstRow = (array) $rows[0];
+                unset($firstRow['geom'], $firstRow['sub_data']);
+                $mainHeaders = array_keys($firstRow);
+                $headers = array_merge($mainHeaders, ['sub']);
+
+                fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
+
+                $writeCsvLine = function (array $values) use ($handle, $headers) {
+                    $ordered = [];
+                    foreach ($headers as $h) {
+                        $ordered[] = '"' . str_replace('"', '""', $values[$h] ?? '') . '"';
+                    }
+                    fwrite($handle, implode(';', $ordered) . "\r\n");
+                };
+
+                foreach ($rows as $row) {
+                    $r = (array) $row;
+                    unset($r['geom']);
+                    $subData = json_decode($r['sub_data'] ?? '[]', true) ?: [];
+                    unset($r['sub_data']);
+                    $r['sub'] = '';
+
+                    $proprietario = $r['proprietario'] ?? '';
+                    if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
+                        foreach (explode(' | ', $proprietario) as $p) {
+                            $writeCsvLine(array_merge($r, ['proprietario' => trim($p)]));
+                        }
+                    } else {
+                        $writeCsvLine($r);
+                    }
+
+                    foreach ($subData as $sub) {
+                        $subRow = array_fill_keys($headers, '');
+                        $subRow['FOGLIO']       = $r['FOGLIO'] ?? '';
+                        $subRow['PARTICELLA']   = $r['PARTICELLA'] ?? '';
+                        $subRow['sub']          = $sub['sub'] ?? '';
+                        $subRow['catasto_tipo'] = $sub['tipo'] ?? 'Fabbricato';
+                        $subProp = $sub['proprietario'] ?? '';
+                        if (!empty($subProp) && str_contains($subProp, ' | ')) {
+                            foreach (explode(' | ', $subProp) as $p) {
+                                $writeCsvLine(array_merge($subRow, ['proprietario' => trim($p)]));
+                            }
+                        } else {
+                            $subRow['proprietario'] = $subProp;
+                            $writeCsvLine($subRow);
+                        }
+                    }
+                }
+            }
+
+            rewind($handle);
+            $csvContent = stream_get_contents($handle);
+            fclose($handle);
+
+            return response($csvContent, 200, [
+                'Content-Type'        => 'text/csv',
+                'Content-Disposition' => "attachment; filename={$fileName}",
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Errore CSV: ' . $e->getMessage()], 500);
         }
     }
 }
