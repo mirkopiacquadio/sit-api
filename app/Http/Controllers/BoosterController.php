@@ -968,6 +968,9 @@ class BoosterController extends Controller
             // SUB FASE 2: versione 2D
             DB::statement("DROP TABLE IF EXISTS ctr_edifici_cartografia2d CASCADE");
             DB::statement("CREATE TABLE ctr_edifici_cartografia2d AS SELECT gid, descr, ST_Force2D(geom) AS geom FROM ctr_edifici_cartografia3d");
+            // gid come PRIMARY KEY: serve a QGIS per poter modificare/eliminare i
+            // poligoni non validi (il CREATE TABLE AS non porta il vincolo).
+            DB::statement("ALTER TABLE ctr_edifici_cartografia2d ADD PRIMARY KEY (gid)");
 
             $count3d = (int) DB::selectOne("SELECT COUNT(*) AS c FROM ctr_edifici_cartografia3d")->c;
             $count2d = (int) DB::selectOne("SELECT COUNT(*) AS c FROM ctr_edifici_cartografia2d")->c;
@@ -1043,6 +1046,8 @@ class BoosterController extends Controller
 
             DB::statement("DROP TABLE IF EXISTS {$edifici} CASCADE");
             DB::statement("CREATE TABLE {$edifici} AS SELECT * FROM {$catasto} WHERE \"TIPOLOGIA\" = 'EDIFICIO'");
+            // gid come PRIMARY KEY: consente la modifica/eliminazione dei poligoni in QGIS.
+            DB::statement("ALTER TABLE {$edifici} ADD PRIMARY KEY (gid)");
             $count = (int) DB::selectOne("SELECT COUNT(*) AS c FROM {$edifici}")->c;
 
             return response()->json([
