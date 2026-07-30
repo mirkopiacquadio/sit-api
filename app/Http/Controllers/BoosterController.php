@@ -263,9 +263,17 @@ class BoosterController extends Controller
                 fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
 
                 $writeCsvLine = function (array $values) use ($handle, $headers) {
+                    // Colonne numeriche: virgola decimale, niente separatore migliaia.
+                    // Col punto Excel in locale IT lo interpreta come separatore delle
+                    // migliaia e lo elimina (881.45 -> 88145).
+                    $numeriche = ['area_mq' => 2, 'auiu' => 3, 'aisect' => 3, 'perc' => 2];
                     $ordered = [];
                     foreach ($headers as $h) {
-                        $ordered[] = '"' . str_replace('"', '""', $values[$h] ?? '') . '"';
+                        $v = $values[$h] ?? '';
+                        if (isset($numeriche[$h]) && $v !== '' && $v !== null) {
+                            $v = number_format((float) $v, $numeriche[$h], ',', '');
+                        }
+                        $ordered[] = '"' . str_replace('"', '""', $v) . '"';
                     }
                     fwrite($handle, implode(';', $ordered) . "\r\n");
                 };
@@ -1171,7 +1179,7 @@ class BoosterController extends Controller
                 poly AS (
                     SELECT id_edificio, descr, tipo_fantasma, \"FOGLIO\", \"PARTICELLA\",
                         ST_SetSRID(geom, {$srid})::geometry(Polygon, {$srid}) AS geom,
-                        ST_Area(geom) AS area_mq
+                        ROUND(ST_Area(geom)::numeric, 2) AS area_mq
                     FROM dumped
                     WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
                 )
@@ -1325,9 +1333,17 @@ class BoosterController extends Controller
                 fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
 
                 $writeCsvLine = function (array $values) use ($handle, $headers) {
+                    // Colonne numeriche: virgola decimale, niente separatore migliaia.
+                    // Col punto Excel in locale IT lo interpreta come separatore delle
+                    // migliaia e lo elimina (881.45 -> 88145).
+                    $numeriche = ['area_mq' => 2, 'auiu' => 3, 'aisect' => 3, 'perc' => 2];
                     $ordered = [];
                     foreach ($headers as $h) {
-                        $ordered[] = '"' . str_replace('"', '""', $values[$h] ?? '') . '"';
+                        $v = $values[$h] ?? '';
+                        if (isset($numeriche[$h]) && $v !== '' && $v !== null) {
+                            $v = number_format((float) $v, $numeriche[$h], ',', '');
+                        }
+                        $ordered[] = '"' . str_replace('"', '""', $v) . '"';
                     }
                     fwrite($handle, implode(';', $ordered) . "\r\n");
                 };
