@@ -37,7 +37,8 @@
                         <p class="text-muted mb-0">Tabella: <strong>{{ $dataVisuale }}</strong></p>
                     </div>
                     <div class="btn-group">
-                        <a href="{{ route('booster.ef.download', ['code_comune' => $code_comune, 'table' => $table]) }}"
+                        {{-- sort/dir propagati: il CSV esce con l'ordinamento a schermo --}}
+                        <a href="{{ route('booster.ef.download', array_filter(['code_comune' => $code_comune, 'table' => $table, 'sort' => $sort, 'dir' => $sort ? $dir : null])) }}"
                            class="btn btn-success">
                             📥 Scarica CSV
                         </a>

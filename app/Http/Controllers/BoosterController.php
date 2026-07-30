@@ -251,7 +251,14 @@ class BoosterController extends Controller
             $fileName = "{$table}.csv";
             $handle = fopen('php://temp', 'w+');
 
-            $rows = DB::select("SELECT * FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
+            // Stesso ordinamento della vista dettaglio (sort/dir passati dal link CSV).
+            $orderBy = $this->boosterOrderBy(
+                $this->sortMapAree(),
+                $request->get('sort'),
+                $request->get('dir'),
+                '"FOGLIO", "PARTICELLA", "STRING"'
+            );
+            $rows = DB::select("SELECT * FROM {$table} ORDER BY {$orderBy}");
 
             if (count($rows) > 0) {
                 // Costruisci headers: escludi geom e sub_data, aggiungi sub alla fine
@@ -723,34 +730,17 @@ class BoosterController extends Controller
             $this->ensureBoosterColumns($table);
 
             // Ordinamento sulle prime 5 colonne (whitelist -> nessuna injection).
-            $sortMap = [
-                'FOGLIO'       => '"FOGLIO"',
-                'PARTICELLA'   => '"PARTICELLA"',
-                'STATO'        => '"STATO"',
-                'STRING'       => '"STRING"',      // ZTO
-                'catasto_tipo' => 'catasto_tipo',  // TIPO CATASTO
-            ];
+            $sortMap = $this->sortMapAree();
             $sort = $request->get('sort');
             $dir  = strtolower($request->get('dir')) === 'desc' ? 'desc' : 'asc';
-
-            $query = DB::table($table);
-            if ($sort && isset($sortMap[$sort])) {
-                $col = $sortMap[$sort];
-                if ($sort === 'FOGLIO' || $sort === 'PARTICELLA') {
-                    // ordinamento numerico-naturale (zero-pad su testo, sempre sicuro)
-                    $query->orderByRaw("lpad({$col}::text, 12, '0') {$dir}");
-                } else {
-                    $query->orderByRaw("{$col} {$dir}");
-                }
-                // tie-breaker stabile
-                $query->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"');
-            } else {
+            if (!$sort || !isset($sortMap[$sort])) {
                 $sort = null;
                 $dir  = 'asc';
-                $query->orderByRaw('"FOGLIO", "PARTICELLA", "STRING"');
             }
 
-            $rows = $query->paginate(50);
+            $rows = DB::table($table)
+                ->orderByRaw($this->boosterOrderBy($sortMap, $sort, $dir, '"FOGLIO", "PARTICELLA", "STRING"'))
+                ->paginate(50);
 
             return view('booster.dettaglio', compact('rows', 'code_comune', 'table', 'sort', 'dir'));
         } catch (\Exception $e) {
@@ -776,6 +766,53 @@ class BoosterController extends Controller
         $rows = DB::select("SELECT gid, lavorato, \"LAYER\", \"STRING\", \"FOGLIO\", \"PARTICELLA\", \"STATO\", auiu, perc, aisect, proprietario, catasto_tipo, sub_data FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\", \"STRING\"");
 
         return response()->json($rows);
+    }
+
+    /** Whitelist colonne ordinabili aree edificabili: chiave logica => espressione SQL. */
+    private function sortMapAree()
+    {
+        return [
+            'FOGLIO'       => '"FOGLIO"',
+            'PARTICELLA'   => '"PARTICELLA"',
+            'STATO'        => '"STATO"',
+            'STRING'       => '"STRING"',      // ZTO
+            'catasto_tipo' => 'catasto_tipo',  // TIPO CATASTO
+        ];
+    }
+
+    /** Whitelist colonne ordinabili edifici fantasma. */
+    private function sortMapEdificiFantasma()
+    {
+        return [
+            'FOGLIO'        => '"FOGLIO"',
+            'PARTICELLA'    => '"PARTICELLA"',
+            'tipo_fantasma' => 'tipo_fantasma',
+            'descr'         => 'descr',
+            'area_mq'       => 'area_mq',
+        ];
+    }
+
+    /**
+     * Costruisce la clausola ORDER BY usata sia dalla vista dettaglio sia
+     * dall'export CSV, cosi' il CSV rispetta l'ordinamento attivo a schermo.
+     * L'ordinamento arriva sempre dalla whitelist -> nessuna injection.
+     */
+    private function boosterOrderBy(array $sortMap, $sort, $dir, $tieBreaker)
+    {
+        $dir = strtolower((string) $dir) === 'desc' ? 'desc' : 'asc';
+
+        if (!$sort || !isset($sortMap[$sort])) {
+            return $tieBreaker;
+        }
+
+        $col = $sortMap[$sort];
+        // FOGLIO/PARTICELLA sono testo: ordinamento numerico-naturale con zero-pad.
+        $expr = ($sort === 'FOGLIO' || $sort === 'PARTICELLA')
+            ? "lpad({$col}::text, 12, '0') {$dir}"
+            : "{$col} {$dir}";
+
+        // tie-breaker stabile
+        return "{$expr}, {$tieBreaker}";
     }
 
     /** Valida il nome di una tabella elaborazione booster (aree edif o edifici fantasma). */
@@ -1270,32 +1307,17 @@ class BoosterController extends Controller
             $this->setDB($code_comune);
             $this->ensureBoosterColumns($table);
 
-            $sortMap = [
-                'FOGLIO'        => '"FOGLIO"',
-                'PARTICELLA'    => '"PARTICELLA"',
-                'tipo_fantasma' => 'tipo_fantasma',
-                'descr'         => 'descr',
-                'area_mq'       => 'area_mq',
-            ];
+            $sortMap = $this->sortMapEdificiFantasma();
             $sort = $request->get('sort');
             $dir  = strtolower($request->get('dir')) === 'desc' ? 'desc' : 'asc';
-
-            $query = DB::table($table);
-            if ($sort && isset($sortMap[$sort])) {
-                $col = $sortMap[$sort];
-                if ($sort === 'FOGLIO' || $sort === 'PARTICELLA') {
-                    $query->orderByRaw("lpad({$col}::text, 12, '0') {$dir}");
-                } else {
-                    $query->orderByRaw("{$col} {$dir}");
-                }
-                $query->orderByRaw('"FOGLIO", "PARTICELLA"');
-            } else {
+            if (!$sort || !isset($sortMap[$sort])) {
                 $sort = null;
                 $dir  = 'asc';
-                $query->orderByRaw('"FOGLIO", "PARTICELLA"');
             }
 
-            $rows = $query->paginate(50);
+            $rows = DB::table($table)
+                ->orderByRaw($this->boosterOrderBy($sortMap, $sort, $dir, '"FOGLIO", "PARTICELLA"'))
+                ->paginate(50);
 
             return view('booster.edifici_fantasma_dettaglio', compact('rows', 'code_comune', 'table', 'sort', 'dir'));
         } catch (\Exception $e) {
@@ -1322,7 +1344,14 @@ class BoosterController extends Controller
             $fileName = "{$table}.csv";
             $handle = fopen('php://temp', 'w+');
 
-            $rows = DB::select("SELECT * FROM {$table} ORDER BY \"FOGLIO\", \"PARTICELLA\"");
+            // Stesso ordinamento della vista dettaglio (sort/dir passati dal link CSV).
+            $orderBy = $this->boosterOrderBy(
+                $this->sortMapEdificiFantasma(),
+                $request->get('sort'),
+                $request->get('dir'),
+                '"FOGLIO", "PARTICELLA"'
+            );
+            $rows = DB::select("SELECT * FROM {$table} ORDER BY {$orderBy}");
 
             if (count($rows) > 0) {
                 $firstRow = (array) $rows[0];
