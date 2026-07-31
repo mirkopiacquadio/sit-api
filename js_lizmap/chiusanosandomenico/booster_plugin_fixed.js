@@ -417,11 +417,14 @@ function apriDaBooster(foglio, particella, tr) {
         tr.classList.add('booster-selezionata');
     }
 
+    // La ricerca avviene sul layer dell'elaborazione aperta (stesso nome della
+    // tabella), non piu' sul catasto: e' quello che contiene queste righe.
     var rowData = {
         foglio: foglio,
         numero: particella,
         sub: null,
-        tipologia: 'terreno'
+        tipologia: 'terreno',
+        layer: window.currentTabella
     };
 
     openLayer(rowData);

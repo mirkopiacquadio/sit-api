@@ -743,54 +743,112 @@ function radioPersona() {
 
 }
 
+// Normalizza un nome per il confronto degli id (Lizmap puo' sostituire i
+// caratteri non alfanumerici quando costruisce gli id delle select).
+function normalizzaNomeLayer(nome) {
+    return String(nome).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Trova la select del pannello "Localizzazione" di un layer.
+ * Lizmap usa id="locate-layer-<layer>" per la select principale (PARTICELLA)
+ * e id="locate-layer-<layer>-<CAMPO>" per il filtro padre (FOGLIO).
+ * Se l'id esatto non c'e', ripiega su un confronto normalizzato: cosi' la
+ * ricerca funziona anche sui layer delle elaborazioni booster, il cui nome
+ * contiene la data (aree_edificabili_finali_29_04_2026_16_43).
+ */
+function trovaLocateSelect(layerName, campo) {
+    const suffisso = campo ? '-' + campo : '';
+
+    const esatta = document.getElementById('locate-layer-' + layerName + suffisso);
+    if (esatta) return $(esatta);
+
+    const atteso = normalizzaNomeLayer(layerName + suffisso);
+    const trovata = Array.from(document.querySelectorAll('select[id^="locate-layer-"]'))
+        .find(s => normalizzaNomeLayer(s.id.replace(/^locate-layer-/, '')) === atteso);
+
+    return trovata ? $(trovata) : $();
+}
+
+/**
+ * Seleziona nella select l'opzione col testo indicato e notifica Lizmap.
+ * Il confronto e' anche numerico, cosi' "001" e "1" combaciano (i FOGLIO del
+ * catasto sono zero-padded, quelli delle elaborazioni booster no).
+ * Se piu' opzioni combaciano (stessa particella su piu' righe) le attiva tutte.
+ */
+function selezionaOpzioneLocate(select, testo) {
+    if (!select.length) return false;
+
+    const cercato = String(testo).trim();
+    if (cercato === '') return false;
+    const numerico = !isNaN(cercato) ? Number(cercato) : null;
+
+    const opzioni = select.find('option').filter(function () {
+        const t = $(this).text().trim();
+        if (t === cercato) return true;
+        return numerico !== null && t !== '' && !isNaN(t) && Number(t) === numerico;
+    });
+
+    if (!opzioni.length) return false;
+
+    const input = select.next('.custom-combobox').find('input');
+    opzioni.each(function () {
+        select.val($(this).val());
+        input.val($(this).text());
+        select.trigger('change');
+    });
+
+    return true;
+}
+
+/** Accende il layer nella legenda, se presente e non gia' attivo. */
+function attivaLayerLegenda(nomeLayer) {
+    const chk = $('#layer-' + nomeLayer + ' button.checkbox[value="' + nomeLayer + '"]');
+    if (chk.length && !chk.hasClass('checked')) chk.click();
+}
+
+/**
+ * Localizza foglio/particella sulla mappa.
+ * rowData.layer (opzionale) indica su quale layer cercare: senza, si usa il
+ * catasto <comune>_catasto; il Booster passa la tabella dell'elaborazione
+ * aperta, che in Lizmap compare come coppia di select dedicata.
+ */
 function openLayer(rowData) {
+
     const comune = comuneUtente;
+    const layerRicerca = rowData.layer || (comune + '_catasto');
+    const isCatasto = (layerRicerca === comune + '_catasto');
+
     var foglio = '';
     var particella = '';
     if (rowData.foglio != null && rowData.foglio != '' && rowData.foglio != undefined) foglio = rowData.foglio.toString().padStart(3, '0');
-    if (rowData.numero != null && rowData.numero != '' && rowData.numero != undefined) particella = rowData.numero;
+    if (rowData.numero != null && rowData.numero != '' && rowData.numero != undefined) particella = rowData.numero.toString();
 
     if (foglio == '' || particella == '') return;
 
-    if ($('#layer-' + comune + foglio + 'utm button.checkbox[value="' + comune + foglio + 'utm"]').hasClass('checked')) {
-        console.log('Il layer è già selezionato.');
-    } else {
-        $('#layer-' + comune + foglio + 'utm button.checkbox[value="' + comune + foglio + 'utm"]').click();
+    // Catasto: si accende il foglio UTM. Booster: il layer dell'elaborazione.
+    attivaLayerLegenda(isCatasto ? (comune + foglio + 'utm') : layerRicerca);
+
+    const foglioSelect = trovaLocateSelect(layerRicerca, 'FOGLIO');
+    if (!foglioSelect.length) {
+        console.log('Localizzazione non trovata per il layer: ' + layerRicerca,
+            'Select disponibili:',
+            Array.from(document.querySelectorAll('select[id^="locate-layer-"]')).map(s => s.id));
+        return;
+    }
+    if (!selezionaOpzioneLocate(foglioSelect, rowData.foglio)) {
+        console.log('Nessun foglio trovato con il testo: ' + rowData.foglio);
+        return;
     }
 
-    const foglioSelect = $('#locate-layer-' + comune + '_catasto-FOGLIO');
-    const foglioInput = foglioSelect.next('.custom-combobox').find('input');
-    const foglioValue = rowData.foglio;
-
-    foglioSelect.val(foglioValue);
-    foglioInput.val(foglioSelect.find('option:selected').text());
-    foglioSelect.trigger('change');
-
+    // La select delle particelle viene ripopolata da Lizmap dopo il change
+    // sul foglio: serve attendere prima di poterci selezionare dentro.
     setTimeout(() => {
-        const particellaSelect = $('#locate-layer-' + comune + '_catasto');
-        const particellaInput = particellaSelect.next('.custom-combobox').find('input');
-        
-        const particellaText = particella; // La particella che vuoi selezionare (in questo caso "25")
-    
-        // Trova tutte le opzioni con il testo corrispondente a particellaText
-        const particellaOptions = particellaSelect.find('option').filter(function () {
-            return $(this).text() === particellaText;
-        });
-    
-        if (particellaOptions.length > 0) {
-            particellaOptions.each(function() {
-                const particellaValue = $(this).val();
-                const particellaLabel = $(this).text();
-                
-                // Seleziona ogni particella trovata
-                particellaSelect.val(particellaValue);
-                particellaInput.val(particellaLabel);
-                particellaSelect.trigger('change');
-                
-                console.log('Particella selezionata: ' + particellaLabel);
-            });
+        const particellaSelect = trovaLocateSelect(layerRicerca, null);
+        if (selezionaOpzioneLocate(particellaSelect, particella)) {
+            console.log('Particella selezionata: ' + particella + ' (' + layerRicerca + ')');
         } else {
-            console.log('Nessuna particella trovata con il testo: ' + particellaText);
+            console.log('Nessuna particella trovata con il testo: ' + particella);
         }
     }, 2500);
 }
