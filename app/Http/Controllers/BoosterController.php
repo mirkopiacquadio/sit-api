@@ -249,7 +249,6 @@ class BoosterController extends Controller
 
         try {
             $fileName = "{$table}.csv";
-            $handle = fopen('php://temp', 'w+');
 
             // Stesso ordinamento della vista dettaglio (sort/dir passati dal link CSV).
             $orderBy = $this->boosterOrderBy(
@@ -260,71 +259,7 @@ class BoosterController extends Controller
             );
             $rows = DB::select("SELECT * FROM {$table} ORDER BY {$orderBy}");
 
-            if (count($rows) > 0) {
-                // Costruisci headers: escludi geom e sub_data, aggiungi sub alla fine
-                $firstRow = (array)$rows[0];
-                unset($firstRow['geom'], $firstRow['sub_data']);
-                $mainHeaders = array_keys($firstRow);
-                $headers = array_merge($mainHeaders, ['sub']);
-
-                fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
-
-                $writeCsvLine = function (array $values) use ($handle, $headers) {
-                    // Colonne numeriche: virgola decimale, niente separatore migliaia.
-                    // Col punto Excel in locale IT lo interpreta come separatore delle
-                    // migliaia e lo elimina (881.45 -> 88145).
-                    $numeriche = ['area_mq' => 2, 'auiu' => 3, 'aisect' => 3, 'perc' => 2];
-                    $ordered = [];
-                    foreach ($headers as $h) {
-                        $v = $values[$h] ?? '';
-                        if (isset($numeriche[$h]) && $v !== '' && $v !== null) {
-                            $v = number_format((float) $v, $numeriche[$h], ',', '');
-                        }
-                        $ordered[] = '"' . str_replace('"', '""', $v) . '"';
-                    }
-                    fwrite($handle, implode(';', $ordered) . "\r\n");
-                };
-
-                foreach ($rows as $row) {
-                    $r = (array)$row;
-                    unset($r['geom']);
-                    $subData = json_decode($r['sub_data'] ?? '[]', true) ?: [];
-                    unset($r['sub_data']);
-                    $r['sub'] = ''; // colonna sub vuota per riga principale
-
-                    // Riga(he) principale — split proprietari multipli
-                    $proprietario = $r['proprietario'] ?? '';
-                    if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
-                        foreach (explode(' | ', $proprietario) as $p) {
-                            $writeCsvLine(array_merge($r, ['proprietario' => trim($p)]));
-                        }
-                    } else {
-                        $writeCsvLine($r);
-                    }
-
-                    // Righe sub — solo FOGLIO, PARTICELLA, sub, proprietario, catasto_tipo
-                    foreach ($subData as $sub) {
-                        $subRow = array_fill_keys($headers, '');
-                        $subRow['FOGLIO']      = $r['FOGLIO'];
-                        $subRow['PARTICELLA']  = $r['PARTICELLA'];
-                        $subRow['sub']         = $sub['sub'] ?? '';
-                        $subRow['catasto_tipo'] = $sub['tipo'] ?? 'Fabbricato';
-                        $subProp = $sub['proprietario'] ?? '';
-                        if (!empty($subProp) && str_contains($subProp, ' | ')) {
-                            foreach (explode(' | ', $subProp) as $p) {
-                                $writeCsvLine(array_merge($subRow, ['proprietario' => trim($p)]));
-                            }
-                        } else {
-                            $subRow['proprietario'] = $subProp;
-                            $writeCsvLine($subRow);
-                        }
-                    }
-                }
-            }
-
-            rewind($handle);
-            $csvContent = stream_get_contents($handle);
-            fclose($handle);
+            $csvContent = $this->csvBooster($rows, $this->colonneCsvAree());
 
             return response($csvContent, 200, [
                 'Content-Type'        => 'text/csv',
@@ -813,6 +748,122 @@ class BoosterController extends Controller
 
         // tie-breaker stabile
         return "{$expr}, {$tieBreaker}";
+    }
+
+    /**
+     * Colonne del CSV aree edificabili: intestazione => chiave del record.
+     * L'ordine e i titoli ricalcano la tabella della vista dettaglio
+     * (resources/views/booster/dettaglio.blade.php), cosi' il cliente
+     * riconcilia a colpo d'occhio quello che vede a schermo e il file.
+     * PROPRIETARIO e SUB sono la colonna web "PROPRIETARI / SUB", che nel CSV
+     * viene sviluppata su piu' righe.
+     */
+    private function colonneCsvAree()
+    {
+        return [
+            'LAVORATO'            => 'lavorato',
+            'FOGLIO'              => 'FOGLIO',
+            'PARTICELLA'          => 'PARTICELLA',
+            'STATO'               => 'STATO',
+            'ZTO'                 => 'STRING',
+            'TIPO CATASTO'        => 'catasto_tipo',
+            'SUP. CATASTALE (m²)' => 'auiu',
+            '%'                   => 'perc',
+            'SUP. IN ZTO (m²)'    => 'aisect',
+            'PROPRIETARIO'        => 'proprietario',
+            'SUB'                 => 'sub',
+        ];
+    }
+
+    /**
+     * Colonne del CSV edifici fantasma, nell'ordine della vista dettaglio
+     * (resources/views/booster/edifici_fantasma_dettaglio.blade.php).
+     * TIPO CATASTO chiude la riga: a schermo non e' una colonna, ma serve a
+     * distinguere terreno/fabbricato sulle righe dei sub.
+     */
+    private function colonneCsvEdificiFantasma()
+    {
+        return [
+            'LAVORATO'        => 'lavorato',
+            'FOGLIO'          => 'FOGLIO',
+            'PARTICELLA'      => 'PARTICELLA',
+            'TIPO FANTASMA'   => 'tipo_fantasma',
+            'DESCR'           => 'descr',
+            'SUPERFICIE (m²)' => 'area_mq',
+            'PROPRIETARIO'    => 'proprietario',
+            'SUB'             => 'sub',
+            'TIPO CATASTO'    => 'catasto_tipo',
+        ];
+    }
+
+    /**
+     * Genera il CSV di un'elaborazione booster.
+     * I proprietari multipli (separati da ' | ') diventano righe distinte e i
+     * sub del fabbricato seguono la riga della loro particella.
+     */
+    private function csvBooster($rows, array $colonne)
+    {
+        $handle = fopen('php://temp', 'w+');
+
+        // BOM UTF-8: senza, Excel sbaglia gli accenti e il "m²" delle intestazioni.
+        fwrite($handle, "\xEF\xBB\xBF");
+        fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', array_keys($colonne))) . "\r\n");
+
+        $scriviRiga = function (array $valori) use ($handle, $colonne) {
+            // Colonne numeriche: 2 decimali come a schermo, virgola decimale e
+            // niente separatore delle migliaia. Col punto Excel in locale IT lo
+            // interpreta come separatore delle migliaia e lo elimina (881.45 -> 88145).
+            $numeriche = ['area_mq', 'auiu', 'aisect', 'perc'];
+            $out = [];
+            foreach ($colonne as $chiave) {
+                $v = $valori[$chiave] ?? '';
+                if (in_array($chiave, $numeriche, true) && $v !== '' && $v !== null) {
+                    $v = number_format((float) $v, 2, ',', '');
+                }
+                $out[] = '"' . str_replace('"', '""', $v) . '"';
+            }
+            fwrite($handle, implode(';', $out) . "\r\n");
+        };
+
+        foreach ($rows as $row) {
+            $r = (array) $row;
+            $subData = json_decode($r['sub_data'] ?? '[]', true) ?: [];
+            $r['sub'] = ''; // colonna sub vuota sulla riga principale
+
+            // Riga(he) principale — un proprietario per riga
+            $proprietario = $r['proprietario'] ?? '';
+            if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
+                foreach (explode(' | ', $proprietario) as $p) {
+                    $scriviRiga(array_merge($r, ['proprietario' => trim($p)]));
+                }
+            } else {
+                $scriviRiga($r);
+            }
+
+            // Righe sub — solo FOGLIO, PARTICELLA, sub, proprietario, catasto_tipo
+            foreach ($subData as $sub) {
+                $subRow = array_fill_keys(array_values($colonne), '');
+                $subRow['FOGLIO']       = $r['FOGLIO'] ?? '';
+                $subRow['PARTICELLA']   = $r['PARTICELLA'] ?? '';
+                $subRow['sub']          = $sub['sub'] ?? '';
+                $subRow['catasto_tipo'] = $sub['tipo'] ?? 'Fabbricato';
+                $subProp = $sub['proprietario'] ?? '';
+                if (!empty($subProp) && str_contains($subProp, ' | ')) {
+                    foreach (explode(' | ', $subProp) as $p) {
+                        $scriviRiga(array_merge($subRow, ['proprietario' => trim($p)]));
+                    }
+                } else {
+                    $subRow['proprietario'] = $subProp;
+                    $scriviRiga($subRow);
+                }
+            }
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return $csv;
     }
 
     /** Valida il nome di una tabella elaborazione booster (aree edif o edifici fantasma). */
@@ -1342,7 +1393,6 @@ class BoosterController extends Controller
 
         try {
             $fileName = "{$table}.csv";
-            $handle = fopen('php://temp', 'w+');
 
             // Stesso ordinamento della vista dettaglio (sort/dir passati dal link CSV).
             $orderBy = $this->boosterOrderBy(
@@ -1353,68 +1403,7 @@ class BoosterController extends Controller
             );
             $rows = DB::select("SELECT * FROM {$table} ORDER BY {$orderBy}");
 
-            if (count($rows) > 0) {
-                $firstRow = (array) $rows[0];
-                unset($firstRow['geom'], $firstRow['sub_data']);
-                $mainHeaders = array_keys($firstRow);
-                $headers = array_merge($mainHeaders, ['sub']);
-
-                fwrite($handle, implode(';', array_map(fn($h) => '"' . $h . '"', $headers)) . "\r\n");
-
-                $writeCsvLine = function (array $values) use ($handle, $headers) {
-                    // Colonne numeriche: virgola decimale, niente separatore migliaia.
-                    // Col punto Excel in locale IT lo interpreta come separatore delle
-                    // migliaia e lo elimina (881.45 -> 88145).
-                    $numeriche = ['area_mq' => 2, 'auiu' => 3, 'aisect' => 3, 'perc' => 2];
-                    $ordered = [];
-                    foreach ($headers as $h) {
-                        $v = $values[$h] ?? '';
-                        if (isset($numeriche[$h]) && $v !== '' && $v !== null) {
-                            $v = number_format((float) $v, $numeriche[$h], ',', '');
-                        }
-                        $ordered[] = '"' . str_replace('"', '""', $v) . '"';
-                    }
-                    fwrite($handle, implode(';', $ordered) . "\r\n");
-                };
-
-                foreach ($rows as $row) {
-                    $r = (array) $row;
-                    unset($r['geom']);
-                    $subData = json_decode($r['sub_data'] ?? '[]', true) ?: [];
-                    unset($r['sub_data']);
-                    $r['sub'] = '';
-
-                    $proprietario = $r['proprietario'] ?? '';
-                    if (!empty($proprietario) && str_contains($proprietario, ' | ')) {
-                        foreach (explode(' | ', $proprietario) as $p) {
-                            $writeCsvLine(array_merge($r, ['proprietario' => trim($p)]));
-                        }
-                    } else {
-                        $writeCsvLine($r);
-                    }
-
-                    foreach ($subData as $sub) {
-                        $subRow = array_fill_keys($headers, '');
-                        $subRow['FOGLIO']       = $r['FOGLIO'] ?? '';
-                        $subRow['PARTICELLA']   = $r['PARTICELLA'] ?? '';
-                        $subRow['sub']          = $sub['sub'] ?? '';
-                        $subRow['catasto_tipo'] = $sub['tipo'] ?? 'Fabbricato';
-                        $subProp = $sub['proprietario'] ?? '';
-                        if (!empty($subProp) && str_contains($subProp, ' | ')) {
-                            foreach (explode(' | ', $subProp) as $p) {
-                                $writeCsvLine(array_merge($subRow, ['proprietario' => trim($p)]));
-                            }
-                        } else {
-                            $subRow['proprietario'] = $subProp;
-                            $writeCsvLine($subRow);
-                        }
-                    }
-                }
-            }
-
-            rewind($handle);
-            $csvContent = stream_get_contents($handle);
-            fclose($handle);
+            $csvContent = $this->csvBooster($rows, $this->colonneCsvEdificiFantasma());
 
             return response($csvContent, 200, [
                 'Content-Type'        => 'text/csv',
