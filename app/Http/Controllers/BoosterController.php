@@ -755,8 +755,9 @@ class BoosterController extends Controller
      * L'ordine e i titoli ricalcano la tabella della vista dettaglio
      * (resources/views/booster/dettaglio.blade.php), cosi' il cliente
      * riconcilia a colpo d'occhio quello che vede a schermo e il file.
-     * PROPRIETARIO e SUB sono la colonna web "PROPRIETARI / SUB", che nel CSV
-     * viene sviluppata su piu' righe.
+     * Unica differenza: a schermo proprietari e sub stanno accorpati in un
+     * elenco puntato dentro "PROPRIETARI / SUB", mentre nel CSV sono sviluppati
+     * su piu' righe, con SUB subito dopo PARTICELLA.
      */
     private function colonneCsvAree()
     {
@@ -764,6 +765,7 @@ class BoosterController extends Controller
             'LAVORATO'            => 'lavorato',
             'FOGLIO'              => 'FOGLIO',
             'PARTICELLA'          => 'PARTICELLA',
+            'SUB'                 => 'sub',
             'STATO'               => 'STATO',
             'ZTO'                 => 'STRING',
             'TIPO CATASTO'        => 'catasto_tipo',
@@ -771,7 +773,6 @@ class BoosterController extends Controller
             '%'                   => 'perc',
             'SUP. IN ZTO (m²)'    => 'aisect',
             'PROPRIETARIO'        => 'proprietario',
-            'SUB'                 => 'sub',
         ];
     }
 
@@ -787,11 +788,11 @@ class BoosterController extends Controller
             'LAVORATO'        => 'lavorato',
             'FOGLIO'          => 'FOGLIO',
             'PARTICELLA'      => 'PARTICELLA',
+            'SUB'             => 'sub',
             'TIPO FANTASMA'   => 'tipo_fantasma',
             'DESCR'           => 'descr',
             'SUPERFICIE (m²)' => 'area_mq',
             'PROPRIETARIO'    => 'proprietario',
-            'SUB'             => 'sub',
             'TIPO CATASTO'    => 'catasto_tipo',
         ];
     }
