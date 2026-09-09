@@ -76,6 +76,53 @@
             font-weight: 700;
             color: var(--primary-color);
         }
+
+        .file-input-it .btn-scegli-file {
+            cursor: pointer;
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+
+        .file-input-it .nome-file {
+            background: #fff;
+        }
+
+        #tabellaRisultati tbody tr {
+            cursor: pointer;
+        }
+
+        #tabellaRisultati tbody tr:hover {
+            background-color: rgba(31, 95, 74, .07);
+        }
+
+        .box-oggi {
+            border: 1px solid #cfd8dc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .box-oggi .box-oggi-titolo {
+            background: #607d8b;
+            color: #fff;
+            font-weight: 600;
+            padding: .4rem .75rem;
+        }
+
+        .box-domani .box-oggi-titolo {
+            background: var(--secondary-color);
+        }
+
+        .diff-evidenza {
+            font-weight: 700;
+        }
+
+        .diff-positiva {
+            color: #c0392b;
+        }
+
+        .diff-nulla {
+            color: #6c757d;
+        }
     </style>
 </head>
 
@@ -104,45 +151,45 @@
                 <div class="card-body">
                     <div class="file-row">
                         <div class="titolo">File 1 &middot; Immobili TARI attivi</div>
-                        <input type="file" class="form-control form-control-sm" data-import="immobili" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'immobili'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="immobili">Importa</button>
                         <span class="badge-stato text-muted" data-stato="immobili">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 2 &middot; Dettaglio per sottocategoria</div>
-                        <input type="file" class="form-control form-control-sm" data-import="dettaglio" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'dettaglio'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="dettaglio">Importa</button>
                         <span class="badge-stato text-muted" data-stato="dettaglio">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 3 &middot; Tariffario TARI</div>
                         <input type="number" class="form-control form-control-sm" style="max-width:100px" placeholder="anno" data-anno="tariffario">
-                        <input type="file" class="form-control form-control-sm" data-import="tariffario" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'tariffario'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="tariffario">Importa</button>
                         <span class="badge-stato text-muted" data-stato="tariffario">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 4 &middot; Riduzioni TARI</div>
                         <input type="number" class="form-control form-control-sm" style="max-width:100px" placeholder="anno" data-anno="riduzioni">
-                        <input type="file" class="form-control form-control-sm" data-import="riduzioni" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'riduzioni'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="riduzioni">Importa</button>
                         <span class="badge-stato text-muted" data-stato="riduzioni">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 6 &middot; Componenti familiari (Anagrafe)</div>
-                        <input type="file" class="form-control form-control-sm" data-import="anagrafe-famiglie" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'anagrafe-famiglie'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="anagrafe-famiglie">Importa</button>
                         <span class="badge-stato text-muted" data-stato="anagrafe-famiglie">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 7 &middot; Cittadini residenti (Anagrafe)</div>
-                        <input type="file" class="form-control form-control-sm" data-import="anagrafe-residenti" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'anagrafe-residenti'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="anagrafe-residenti">Importa</button>
                         <span class="badge-stato text-muted" data-stato="anagrafe-residenti">non importato</span>
                     </div>
                     <div class="file-row">
                         <div class="titolo">File 8 &middot; Raggruppamento famiglie</div>
-                        <input type="file" class="form-control form-control-sm" data-import="gruppi-famiglia" accept=".xlsx,.xls,.csv">
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'gruppi-famiglia'])
                         <button class="btn btn-sm btn-primary" data-azione="importa" data-import="gruppi-famiglia">Importa</button>
                         <span class="badge-stato text-muted" data-stato="gruppi-famiglia">non importato</span>
                     </div>
@@ -186,11 +233,30 @@
         </div>
     </div>
 
+    <div class="modal fade" id="modalDettaglio" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-left-right"></i> Dettaglio posizione &middot; Oggi e Domani</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+                </div>
+                <div class="modal-body" id="dettaglioBody"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const baseUrl = '/api/monter/booster-tributi';
         let comuneCorrente = null;
+
+        document.querySelectorAll('input[type="file"][data-import]').forEach(input => {
+            input.addEventListener('change', () => {
+                const etichetta = document.querySelector(`[data-filename-for="${input.dataset.import}"]`);
+                etichetta.textContent = input.files.length ? input.files[0].name : 'Nessun file selezionato';
+            });
+        });
 
         document.getElementById('comuneSelect').addEventListener('change', (e) => {
             comuneCorrente = e.target.value || null;
@@ -327,6 +393,13 @@
         document.getElementById('btnCalcolaMq').addEventListener('click', () => avviaCalcolo('mq', 'mq'));
         document.getElementById('btnCalcolaComponenti').addEventListener('click', () => avviaCalcolo('componenti', 'componenti'));
 
+        let ultimiRisultati = [];
+        let ultimoTipoRisultato = null;
+
+        function fmtEuro(n) {
+            return '€ ' + Number(n ?? 0).toLocaleString('it-IT', { minimumFractionDigits: 2 });
+        }
+
         function caricaRisultati(tipo, endpoint) {
             fetch(`${baseUrl}/${comuneCorrente}/risultati/${endpoint}`)
                 .then(r => r.json())
@@ -334,22 +407,107 @@
                     if (!res.success) return;
                     document.getElementById('cardRisultati').style.display = 'block';
                     document.getElementById('linkExport').href = `${baseUrl}/${comuneCorrente}/risultati/${endpoint}/export`;
-                    document.getElementById('totaleGenerale').textContent =
-                        '€ ' + res.totale_generale.toLocaleString('it-IT', { minimumFractionDigits: 2 });
+                    document.getElementById('totaleGenerale').textContent = fmtEuro(res.totale_generale);
+
+                    ultimiRisultati = res.righe;
+                    ultimoTipoRisultato = tipo;
 
                     const diffLabel = tipo === 'mq' ? 'Diff. mq' : 'Diff. componenti';
                     const diffField = tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
                     const thead = document.querySelector('#tabellaRisultati thead');
                     const tbody = document.querySelector('#tabellaRisultati tbody');
                     thead.innerHTML = `<tr><th>Codice utenza</th><th>Denominazione</th><th>Indirizzo immobile</th><th>${diffLabel}</th><th>Totale recuperabile</th></tr>`;
-                    tbody.innerHTML = res.righe.map(r => `<tr>
+                    tbody.innerHTML = res.righe.map((r, idx) => `<tr data-idx="${idx}" title="Clicca per il dettaglio Oggi/Domani">
                         <td>${r.codice_utenza}</td>
                         <td>${r.denominazione ?? ''}</td>
                         <td>${r.indirizzo_immobile ?? ''}</td>
                         <td>${r[diffField]}</td>
-                        <td>€ ${Number(r.totale_recuperabile).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td>${fmtEuro(r.totale_recuperabile)}</td>
                     </tr>`).join('');
+                    tbody.querySelectorAll('tr').forEach(tr => {
+                        tr.addEventListener('click', () => mostraDettaglioPosizione(ultimiRisultati[tr.dataset.idx], ultimoTipoRisultato));
+                    });
                 });
+        }
+
+        function mostraDettaglioPosizione(riga, tipo) {
+            const componentiDichiarati = Number(riga.componenti_residenti ?? 0);
+            const mqOggi = Number(riga.mq_tari ?? 0);
+            const mqCatasto = Number(riga.mq_catasto ?? 0);
+
+            const oggi = {
+                'Mq dichiarati TARI': mqOggi.toLocaleString('it-IT'),
+                'Mq catastali (Sister)': mqCatasto.toLocaleString('it-IT'),
+                'Componenti residenti dichiarati': componentiDichiarati,
+                'Componenti non residenti': Number(riga.componenti_non_residenti ?? 0),
+            };
+
+            let domani, diffLabel, diffValore;
+            if (tipo === 'mq') {
+                const mqCorretti = Math.round(mqCatasto * 0.8 * 100) / 100;
+                diffLabel = 'Differenza mq non dichiarati';
+                diffValore = Number(riga.mq_diff ?? 0);
+                domani = {
+                    'Mq corretti (80% mq catasto)': mqCorretti.toLocaleString('it-IT'),
+                    'Mq dichiarati TARI (oggi)': mqOggi.toLocaleString('it-IT'),
+                };
+            } else {
+                const componentiReali = componentiDichiarati + Number(riga.componenti_diff ?? 0);
+                diffLabel = 'Differenza componenti non dichiarati';
+                diffValore = Number(riga.componenti_diff ?? 0);
+                domani = {
+                    'Componenti reali (Anagrafe)': componentiReali,
+                    'Componenti dichiarati TARI (oggi)': componentiDichiarati,
+                    'Indirizzo/residenza coerenti': riga.match_residenza_ubicazione === true ? 'Sì' : (riga.match_residenza_ubicazione === false ? 'No' : 'N/D'),
+                };
+            }
+
+            const classeDiff = diffValore > 0 ? 'diff-positiva' : 'diff-nulla';
+
+            const dettaglioAnni = typeof riga.dettaglio_anni === 'string' ? JSON.parse(riga.dettaglio_anni) : (riga.dettaglio_anni ?? {});
+            const righeAnni = Object.keys(dettaglioAnni).sort().map(anno => {
+                const d = dettaglioAnni[anno];
+                if (d.errore) {
+                    return `<tr><td>${anno}</td><td colspan="4" class="text-muted">${d.errore}</td></tr>`;
+                }
+                return `<tr>
+                    <td>${anno}</td>
+                    <td>${fmtEuro(d.dovuto)}</td>
+                    <td>${fmtEuro(d.sanzione)}</td>
+                    <td>${fmtEuro(d.interessi)}</td>
+                    <td class="fw-bold">${fmtEuro(d.totale)}</td>
+                </tr>`;
+            }).join('');
+
+            const boxHtml = (titolo, classe, dati) => `
+                <div class="box-oggi ${classe} h-100">
+                    <div class="box-oggi-titolo">${titolo}</div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            ${Object.entries(dati).map(([k, v]) => `<tr><td>${k}</td><td class="text-end fw-semibold">${v}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+
+            document.getElementById('dettaglioBody').innerHTML = `
+                <p class="mb-1"><strong>${riga.denominazione ?? ''}</strong> &middot; ${riga.codice_fiscale_piva ?? ''}</p>
+                <p class="text-muted small mb-3">Codice utenza ${riga.codice_utenza} &middot; ${riga.indirizzo_immobile ?? ''}</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">${boxHtml('OGGI (dati storici)', 'box-oggi', oggi)}</div>
+                    <div class="col-md-6">${boxHtml('DOMANI (dati simulati)', 'box-domani', domani)}</div>
+                </div>
+                <p class="${classeDiff} diff-evidenza">${diffLabel}: ${diffValore}</p>
+                <h6 class="mt-3">Recupero per anno (dovuto, sanzioni, interessi)</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead><tr><th>Anno</th><th>Dovuto</th><th>Sanzione</th><th>Interessi</th><th>Totale</th></tr></thead>
+                        <tbody>${righeAnni}</tbody>
+                    </table>
+                </div>
+                <p class="text-end fw-bold fs-5 mb-0">Totale recuperabile: ${fmtEuro(riga.totale_recuperabile)}</p>
+            `;
+
+            new bootstrap.Modal(document.getElementById('modalDettaglio')).show();
         }
     </script>
 </body>
