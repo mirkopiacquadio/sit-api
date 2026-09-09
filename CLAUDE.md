@@ -74,3 +74,27 @@ Laravel Sanctum token-based auth. Tokens stored in `personal_access_tokens` tabl
 ### Helpers
 
 `app/Helpers/AppHelper.php` — custom utility functions used across controllers.
+
+## Booster subsystem
+
+The **Booster** is a management app (Blade `resources/views/booster/index.blade.php`, "Booster Monter") plus backend endpoints in `BoosterController` for producing analysis tables per municipality. `setDB($code_comune)` switches the `pgsql` connection to the municipality's database; the resulting tables live in that DB with generic (un-prefixed) names.
+
+### Catasto source-table separation (dynamic per-comune, `<code>` = lowercase comune code)
+
+- **CDU** → `<code>_catasto` (original, untouched)
+- **Aree edificabili** → `<code>_catasto_base_aree_edif` (hand-made editable copy; `elabora()` uses it and returns 422 if missing)
+- **Edifici fantasma** → `<code>_catasto_edifici` (derived: `WHERE "TIPOLOGIA"='EDIFICIO'`)
+
+`<code>_catasto` mixes `TIPOLOGIA='PARTICELLA'` rows (have FOGLIO/PARTICELLA) and `TIPOLOGIA='EDIFICIO'` rows (empty FOGLIO/PARTICELLA).
+
+### Final tables and QGIS constraint
+
+Final tables (`aree_edificabili_finali_<date>`, `edifici_fantasma_finali_<date>`) are created via `CREATE TABLE AS ... GROUP BY` and are loaded as QGIS layers. **QGIS Server rejects a `bigint` primary key**, so they use a **`gid serial` (int4) PRIMARY KEY**. `ensureBoosterColumns($table)` migrates old tables (drops `id`, adds `gid`) on first web-app access. `lavorato`, `proprietario`, `catasto_tipo`, `sub_data` are also added; `AggiornaPropietariBooster` (generic over any table with FOGLIO/PARTICELLA) populates the owner columns.
+
+### Edifici Fantasma feature
+
+Web-app only (no Lizmap plugin JS). Multi-phase pipeline under `api/monter/booster/ef/*` (routes in `routes/web.php`, CSRF via `X-CSRF-TOKEN`) mapping a PostGIS workflow: FASE 1 CTR extract + 3D check, FASE 2 catasto edifici, FASE 3 geometry validity, FASE 4+5 difference/classification → `edifici_fantasma_finali_<date>` + owners. SRID auto-detected via `ST_SRID` (fallback 32633). Detail view: `resources/views/booster/edifici_fantasma_dettaglio.blade.php`.
+
+## Lizmap plugin JS (`js_lizmap/`)
+
+Project JS served by Lizmap 3.6 from `lm_repos/monter_data/media/js/<comune>/`, mirrored here under per-comune folders (`chiusanosandomenico/`, `santagatadegoti/`, `castelpagano/`). `booster_plugin_fixed.js` is **identical across the three** (comune-agnostic, uses global `comuneUtente`): edit the chiusano copy, then `cp` to the others, verify with `node --check`. It renders the Booster viewer as a top-right modal (no backdrop) over the map, gated to users whose login contains `tributi`.
