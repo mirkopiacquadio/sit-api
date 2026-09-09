@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BoosterController;
+use App\Http\Controllers\BoosterTributiController;
 use App\Http\Controllers\CatastoImmobileController;
 use App\Http\Controllers\CDUController;
 use App\Http\Controllers\ExcelTxtController;
@@ -73,4 +74,30 @@ Route::prefix('api/monter/booster')->name('booster.')->group(function () {
     Route::get('/ef/dettaglio/{code_comune}/{table}', [BoosterController::class, 'efDettaglio'])->name('ef.dettaglio');
     Route::get('/ef/download/{code_comune}/{table}', [BoosterController::class, 'efDownload'])->name('ef.download');
     Route::delete('/ef/elimina/{code_comune}/{table}', [BoosterController::class, 'efElimina'])->name('ef.elimina');
+});
+
+Route::prefix('api/monter/booster-tributi')->name('booster-tributi.')->group(function () {
+    Route::get('/', [BoosterTributiController::class, 'index'])->name('index');
+
+    Route::get('/{comune}/stato', [BoosterTributiController::class, 'stato'])->name('stato');
+
+    Route::post('/{comune}/import/immobili', [BoosterTributiController::class, 'importaImmobili'])->name('import.immobili');
+    Route::post('/{comune}/import/dettaglio', [BoosterTributiController::class, 'importaDettaglio'])->name('import.dettaglio');
+    Route::post('/{comune}/import/tariffario', [BoosterTributiController::class, 'importaTariffario'])->name('import.tariffario');
+    Route::post('/{comune}/import/riduzioni', [BoosterTributiController::class, 'importaRiduzioni'])->name('import.riduzioni');
+    Route::post('/{comune}/import/anagrafe-famiglie', [BoosterTributiController::class, 'importaAnagrafeFamiglie'])->name('import.anagrafe-famiglie');
+    Route::post('/{comune}/import/anagrafe-residenti', [BoosterTributiController::class, 'importaAnagrafeResidenti'])->name('import.anagrafe-residenti');
+    Route::post('/{comune}/import/gruppi-famiglia', [BoosterTributiController::class, 'importaGruppiFamiglia'])->name('import.gruppi-famiglia');
+
+    Route::get('/{comune}/anomalie/{batchId}', [BoosterTributiController::class, 'anomalie'])->name('anomalie');
+    Route::get('/{comune}/anomalie/{batchId}/export', [BoosterTributiController::class, 'exportAnomalie'])->name('anomalie.export');
+
+    Route::post('/{comune}/calcola/mq', [BoosterTributiController::class, 'calcolaMq'])->name('calcola.mq');
+    Route::post('/{comune}/calcola/componenti', [BoosterTributiController::class, 'calcolaComponenti'])->name('calcola.componenti');
+    Route::get('/calcola/stato/{jobKey}', [BoosterTributiController::class, 'statoCalcolo'])->name('calcola.stato');
+
+    Route::get('/{comune}/risultati/mq', [BoosterTributiController::class, 'risultatiMq'])->name('risultati.mq');
+    Route::get('/{comune}/risultati/componenti', [BoosterTributiController::class, 'risultatiComponenti'])->name('risultati.componenti');
+    Route::get('/{comune}/risultati/mq/export', [BoosterTributiController::class, 'exportRisultatiMq'])->name('risultati.mq.export');
+    Route::get('/{comune}/risultati/componenti/export', [BoosterTributiController::class, 'exportRisultatiComponenti'])->name('risultati.componenti.export');
 });
