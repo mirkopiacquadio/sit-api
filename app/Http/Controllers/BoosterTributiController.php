@@ -49,7 +49,14 @@ class BoosterTributiController extends Controller
             $campo => 'required|file|extensions:xlsx,xls,csv',
         ]);
 
-        $path = $request->file($campo)->store('booster_tributi_tmp', 'local');
+        // storeAs con l'estensione ORIGINALE dichiarata dal client: store()
+        // da solo rinomina il file usando l'estensione dedotta dal mime
+        // reale (.html per i vecchi export Halley), e ExcelImportReader::
+        // isTabellaHtml() si basa sull'estensione del file salvato per
+        // decidere se sniffare il contenuto come HTML.
+        $file = $request->file($campo);
+        $nomeFile = Str::random(40).'.'.$file->getClientOriginalExtension();
+        $path = $file->storeAs('booster_tributi_tmp', $nomeFile, 'local');
 
         return storage_path('app/'.$path);
     }
