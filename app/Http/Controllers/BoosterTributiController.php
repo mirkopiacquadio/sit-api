@@ -274,7 +274,7 @@ class BoosterTributiController extends Controller
         $this->setComune($comune);
 
         $righe = DB::table('bt_anomalie_snapshot')
-            ->where('import_batch_id', $batchId)
+            ->where('bt_anomalie_snapshot.import_batch_id', $batchId)
             ->join('bt_tari_immobili', function ($join) use ($batchId) {
                 $join->on('bt_tari_immobili.codice_utenza', '=', 'bt_anomalie_snapshot.codice_utenza')
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchId);
@@ -297,7 +297,7 @@ class BoosterTributiController extends Controller
         $this->setComune($comune);
 
         $righe = DB::table('bt_anomalie_snapshot')
-            ->where('import_batch_id', $batchId)
+            ->where('bt_anomalie_snapshot.import_batch_id', $batchId)
             ->join('bt_tari_immobili', function ($join) use ($batchId) {
                 $join->on('bt_tari_immobili.codice_utenza', '=', 'bt_anomalie_snapshot.codice_utenza')
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchId);
@@ -430,7 +430,7 @@ class BoosterTributiController extends Controller
         $batchImmobili = $this->ultimoBatch('file1_immobili');
 
         $righe = DB::table('bt_recupero_mq')
-            ->where('import_batch_id', $batchImmobili)
+            ->where('bt_recupero_mq.import_batch_id', $batchImmobili)
             ->join('bt_tari_immobili', function ($join) use ($batchImmobili) {
                 $join->on('bt_tari_immobili.codice_utenza', '=', 'bt_recupero_mq.codice_utenza')
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchImmobili);
@@ -452,7 +452,7 @@ class BoosterTributiController extends Controller
         $batchImmobili = $this->ultimoBatch('file1_immobili');
 
         $righe = DB::table('bt_recupero_componenti')
-            ->where('import_batch_id', $batchImmobili)
+            ->where('bt_recupero_componenti.import_batch_id', $batchImmobili)
             ->join('bt_tari_immobili', function ($join) use ($batchImmobili) {
                 $join->on('bt_tari_immobili.codice_utenza', '=', 'bt_recupero_componenti.codice_utenza')
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchImmobili);
@@ -492,7 +492,7 @@ class BoosterTributiController extends Controller
         $colonnaDiff = $tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
 
         $righe = DB::table($tabella)
-            ->where('import_batch_id', $batchImmobili)
+            ->where("{$tabella}.import_batch_id", $batchImmobili)
             ->join('bt_tari_immobili', function ($join) use ($batchImmobili, $tabella) {
                 $join->on('bt_tari_immobili.codice_utenza', '=', "{$tabella}.codice_utenza")
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchImmobili);
