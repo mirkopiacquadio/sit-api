@@ -41,8 +41,12 @@ class BoosterTributiController extends Controller
 
     private function fileTemporaneo(Request $request, string $campo): string
     {
+        // I vecchi export Halley .xls sono in realtà tabelle HTML (vedi
+        // ExcelImportReader::isTabellaHtml): il PHP fileinfo li rileva come
+        // text/html, quindi la validazione va fatta sull'estensione dichiarata
+        // dal client (`extensions`), non sul mime-sniffing di `mimes`.
         $request->validate([
-            $campo => 'required|file|mimes:xlsx,xls,csv',
+            $campo => 'required|file|extensions:xlsx,xls,csv',
         ]);
 
         $path = $request->file($campo)->store('booster_tributi_tmp', 'local');
@@ -59,10 +63,12 @@ class BoosterTributiController extends Controller
 
     public function importaImmobili(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile1Immobili($path);
             $anomalie = (new AnomalyDetector())->rileva($esito['batch_id']);
 
@@ -74,120 +80,160 @@ class BoosterTributiController extends Controller
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaImmobili: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaDettaglio(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile2Dettaglio($path);
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaDettaglio: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaTariffario(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $request->validate(['anno' => 'required|digits:4']);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $request->validate(['anno' => 'required|digits:4']);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile3Tariffario($path, (int) $request->input('anno'));
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaTariffario: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaRiduzioni(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $request->validate(['anno' => 'required|digits:4']);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $request->validate(['anno' => 'required|digits:4']);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile4Riduzioni($path, (int) $request->input('anno'));
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaRiduzioni: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaAnagrafeFamiglie(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile6AnagrafeFamiglie($path);
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaAnagrafeFamiglie: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaAnagrafeResidenti(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile7AnagrafeResidenti($path);
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaAnagrafeResidenti: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
     }
 
     public function importaGruppiFamiglia(Request $request, string $comune)
     {
-        $this->setComune($comune);
-        $path = $this->fileTemporaneo($request, 'file');
+        $path = null;
 
         try {
+            $this->setComune($comune);
+            $path = $this->fileTemporaneo($request, 'file');
+
             $esito = (new TariImportService())->importaFile8GruppiFamiglia($path);
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
             Log::error('BoosterTributi importaGruppiFamiglia: '.$e->getMessage());
 
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
-            $this->eliminaTemporaneo($path);
+            if ($path) {
+                $this->eliminaTemporaneo($path);
+            }
         }
+    }
+
+    /**
+     * Messaggio leggibile per l'alert JS: le ValidationException (es. anno
+     * mancante, file di tipo non ammesso) hanno un messaggio generico ("The
+     * given data was invalid.") ma espongono il dettaglio in errors().
+     */
+    private function messaggioErrore(\Throwable $e): string
+    {
+        if ($e instanceof \Illuminate\Validation\ValidationException) {
+            return collect($e->errors())->flatten()->implode(' ');
+        }
+
+        return $e->getMessage();
     }
 
     /**

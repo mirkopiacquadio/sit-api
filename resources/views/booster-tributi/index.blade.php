@@ -251,6 +251,16 @@
         const baseUrl = '/api/monter/booster-tributi';
         let comuneCorrente = null;
 
+        // Senza 'Accept: application/json' Laravel tratta le risposte di
+        // errore (validazione, eccezioni) come richieste "normali" e
+        // restituisce una pagina HTML invece di JSON, mandando in crash il
+        // successivo r.json() (Unexpected token '<').
+        function apiFetch(url, options = {}) {
+            options.headers = Object.assign({ Accept: 'application/json' }, options.headers || {});
+
+            return fetch(url, options);
+        }
+
         document.querySelectorAll('input[type="file"][data-import]').forEach(input => {
             input.addEventListener('change', () => {
                 const etichetta = document.querySelector(`[data-filename-for="${input.dataset.import}"]`);
@@ -267,7 +277,7 @@
         });
 
         function aggiornaStato() {
-            fetch(`${baseUrl}/${comuneCorrente}/stato`)
+            apiFetch(`${baseUrl}/${comuneCorrente}/stato`)
                 .then(r => r.json())
                 .then(res => {
                     if (!res.success) return;
@@ -308,7 +318,7 @@
                 btn.disabled = true;
                 btn.textContent = 'Importazione...';
 
-                fetch(`${baseUrl}/${comuneCorrente}/import/${tipo}`, {
+                apiFetch(`${baseUrl}/${comuneCorrente}/import/${tipo}`, {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': csrfToken },
                     body: formData,
@@ -351,16 +361,35 @@
         }
 
         function pollJob(jobKey, ontick, onfine) {
+            // Il job appare in cache solo quando un worker (`php artisan
+            // queue:work`) lo prende in carico: se dopo ~15s non è ancora
+            // comparso, molto probabilmente il worker non è attivo, invece
+            // di restare bloccati in silenzio su "Avvio calcolo...".
+            let tentativiSenzaEsito = 0;
+            const SOGLIA_WORKER_INATTIVO = 10;
+
             const interval = setInterval(() => {
-                fetch(`${baseUrl}/calcola/stato/${jobKey}`)
+                apiFetch(`${baseUrl}/calcola/stato/${jobKey}`)
                     .then(r => r.json())
                     .then(res => {
-                        if (!res.success) { clearInterval(interval); return; }
+                        if (!res.success) {
+                            tentativiSenzaEsito++;
+                            if (tentativiSenzaEsito >= SOGLIA_WORKER_INATTIVO) {
+                                clearInterval(interval);
+                                onfine({ status: 'error', errore: 'Il calcolo non è partito: il queue worker (php artisan queue:work) sembra non attivo sul server.' });
+                            }
+                            return;
+                        }
+                        tentativiSenzaEsito = 0;
                         ontick(res);
                         if (res.status === 'completed' || res.status === 'error') {
                             clearInterval(interval);
                             onfine(res);
                         }
+                    })
+                    .catch(err => {
+                        clearInterval(interval);
+                        onfine({ status: 'error', errore: 'Errore di rete: ' + err.message });
                     });
             }, 1500);
         }
@@ -370,7 +399,7 @@
             const progresso = document.getElementById('progressoCalcolo');
             progresso.textContent = 'Avvio calcolo...';
 
-            fetch(`${baseUrl}/${comuneCorrente}/calcola/${endpoint}`, {
+            apiFetch(`${baseUrl}/${comuneCorrente}/calcola/${endpoint}`, {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': csrfToken },
             })
@@ -387,6 +416,10 @@
                         progresso.textContent = `Completato: ${stato.righe_risultato} immobili con recupero individuato.`;
                         caricaRisultati(tipo, endpoint);
                     });
+                })
+                .catch(err => {
+                    progresso.textContent = '';
+                    alert('Errore di rete: ' + err.message);
                 });
         }
 
@@ -401,7 +434,7 @@
         }
 
         function caricaRisultati(tipo, endpoint) {
-            fetch(`${baseUrl}/${comuneCorrente}/risultati/${endpoint}`)
+            apiFetch(`${baseUrl}/${comuneCorrente}/risultati/${endpoint}`)
                 .then(r => r.json())
                 .then(res => {
                     if (!res.success) return;
