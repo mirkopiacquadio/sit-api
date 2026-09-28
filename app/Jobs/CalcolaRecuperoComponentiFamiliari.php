@@ -67,7 +67,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
             $residenti = DB::connection('pgsql')->table('bt_anagrafe_residenti')
                 ->where('import_batch_id', $this->batchAnagrafeResidenti)
                 ->get()
-                ->keyBy(fn ($r) => mb_strtoupper((string) $r->codice_fiscale));
+                ->keyBy(fn ($r) => $this->normalizzaCf($r->codice_fiscale));
 
             $gruppiPerFamiglia = null;
             if ($this->batchGruppiFamiglia) {
@@ -96,7 +96,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                     Cache::put($cacheKey, ['status' => 'running', 'processate' => $processate, 'totale' => $totale], 14400);
                 }
 
-                $cf = $immobile->codice_fiscale_piva ? mb_strtoupper($immobile->codice_fiscale_piva) : null;
+                $cf = $this->normalizzaCf($immobile->codice_fiscale_piva);
                 if ($cf === null) {
                     continue;
                 }
@@ -167,6 +167,23 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
             Cache::put($cacheKey, ['status' => 'error', 'errore' => $e->getMessage()], 14400);
             throw $e;
         }
+    }
+
+    /**
+     * Confronto CF Immobili TARI (File 1) <-> Anagrafe residenti (File 7): gli
+     * export Halley possono avere spazi iniziali/finali (campi a larghezza fissa),
+     * quindi serve trim oltre a maiuscole/minuscole, altrimenti CF identici non
+     * matchano e il ricalcolo scarta la riga.
+     */
+    private function normalizzaCf(?string $cf): ?string
+    {
+        if ($cf === null) {
+            return null;
+        }
+
+        $cf = mb_strtoupper(trim($cf));
+
+        return $cf !== '' ? $cf : null;
     }
 
     private function categoriaEsclusa(?string $categoria): bool
