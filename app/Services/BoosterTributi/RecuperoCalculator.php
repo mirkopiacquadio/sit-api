@@ -26,23 +26,24 @@ use Illuminate\Support\Facades\DB;
 class RecuperoCalculator
 {
     private const SANZIONE_PERCENTUALE = 0.30;
+
     private const MAX_ANNI_ACCERTAMENTO = 5;
 
     private array $cacheTariffario = [];
+
     private array $cacheInteressi = [];
 
     /**
-     * @param \Closure(int,string,string):?float $tariffaLookup ($anno, $codiceTariffa, $tipoQuota) -> tariffa o null se mancante
-     * @param \Closure(int,string,string):float $riduzioneLookup ($anno, $nomeRiduzione, $tipoQuota) -> percentuale 0-1 (0 se non applicabile/non trovata)
-     * @param \Closure(int):float $interesseLookup ($anno) -> percentuale legale di quell'anno, 0-1
+     * @param  \Closure(int,string,string):?float  $tariffaLookup  ($anno, $codiceTariffa, $tipoQuota) -> tariffa o null se mancante
+     * @param  \Closure(int,string,string):float  $riduzioneLookup  ($anno, $nomeRiduzione, $tipoQuota) -> percentuale 0-1 (0 se non applicabile/non trovata)
+     * @param  \Closure(int):float  $interesseLookup  ($anno) -> percentuale legale di quell'anno, 0-1
      */
     public function __construct(
         private \Closure $tariffaLookup,
         private \Closure $riduzioneLookup,
         private \Closure $interesseLookup,
         private ?int $annoCorrente = null
-    ) {
-    }
+    ) {}
 
     /**
      * Istanza pronta all'uso nei Job, con lookup basati sulle tabelle bt_tariffario /
@@ -93,7 +94,7 @@ class RecuperoCalculator
     }
 
     /**
-     * @param array<int,string|null> $riduzioniApplicate descrizioni riduzione (File 2, colonne riduzione_1/2/3)
+     * @param  array<int,string|null>  $riduzioniApplicate  descrizioni riduzione (File 2, colonne riduzione_1/2/3)
      * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, anni_mancanti: array<int>}
      */
     public function calcola(
@@ -117,6 +118,7 @@ class RecuperoCalculator
             if ($tariffa === null) {
                 $anniMancanti[] = $anno;
                 $dettaglioAnni[$anno] = ['errore' => 'tariffario mancante'];
+
                 continue;
             }
 
@@ -157,6 +159,119 @@ class RecuperoCalculator
         ];
     }
 
+    /**
+     * Variante di calcola() per le "DIFFERENZE COMPONENTI FAMILIARI": la tariffa
+     * variabile NON è lineare per componente (File 3 è una tabella a scaglioni,
+     * es. 1 componente 156€, 2 componenti 308€, 3 componenti 398€...), quindi il
+     * dovuto di un anno è la DIFFERENZA tra lo scaglione reale e quello dichiarato,
+     * non "numero componenti in più × tariffa di un singolo scaglione".
+     *
+     * La riduzione "Unico occupante" applicata nel dichiarato (1 componente) non è
+     * più applicabile quando i componenti reali sono >1: viene esclusa dal ricalcolo
+     * per nome (case-insensitive), le altre riduzioni dichiarate (es. Compostaggio)
+     * restano valide. Vedi ISTRUZIONI Monter e annotazioni cliente 2026-09-27.
+     *
+     * @param  array<int,string|null>  $riduzioniApplicate  descrizioni riduzione dichiarate (File 2)
+     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, anni_mancanti: array<int>}
+     */
+    public function calcolaComponenti(
+        ?string $codiceTariffaDichiarato,
+        int $componentiReali,
+        ?string $dataInizioValidita,
+        array $riduzioniApplicate = []
+    ): array {
+        $annoCorrente = $this->annoCorrente ?? (int) now()->format('Y');
+        $annoInizio = $dataInizioValidita ? (int) date('Y', strtotime($dataInizioValidita)) : $annoCorrente;
+        $primoAnno = max($annoInizio, $annoCorrente - self::MAX_ANNI_ACCERTAMENTO);
+
+        $categoria = $codiceTariffaDichiarato !== null ? explode('.', $codiceTariffaDichiarato, 2)[0] : null;
+        $riduzioniRicalcolo = $this->escludiUnicoOccupante($riduzioniApplicate, $componentiReali);
+
+        $dettaglioAnni = [];
+        $anniMancanti = [];
+        $totale = 0.0;
+
+        for ($anno = $primoAnno; $anno <= $annoCorrente; $anno++) {
+            $tariffaDichiarata = $codiceTariffaDichiarato ? $this->tariffaAnno($anno, $codiceTariffaDichiarato, 'variabile') : null;
+            $tariffaReale = $categoria !== null ? $this->tariffaScaglioneComponenti($anno, $categoria, $componentiReali) : null;
+
+            if ($tariffaDichiarata === null || $tariffaReale === null) {
+                $anniMancanti[] = $anno;
+                $dettaglioAnni[$anno] = ['errore' => 'tariffario mancante'];
+
+                continue;
+            }
+
+            $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniRicalcolo, 'variabile');
+            $dovutoAnno = round(($tariffaReale - $tariffaDichiarata) * (1 - $riduzionePerc), 2);
+
+            if ($anno === $annoCorrente) {
+                $totaleAnno = $dovutoAnno;
+                $dettaglioAnni[$anno] = [
+                    'dovuto' => $dovutoAnno,
+                    'sanzione' => 0.0,
+                    'interessi' => 0.0,
+                    'riduzione_applicata' => $riduzionePerc,
+                    'totale' => $totaleAnno,
+                    'tipo' => 'ruolo',
+                ];
+            } else {
+                $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
+                $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente), 2);
+                $totaleAnno = round($dovutoAnno + $sanzione + $interessi, 2);
+                $dettaglioAnni[$anno] = [
+                    'dovuto' => $dovutoAnno,
+                    'sanzione' => $sanzione,
+                    'interessi' => $interessi,
+                    'riduzione_applicata' => $riduzionePerc,
+                    'totale' => $totaleAnno,
+                    'tipo' => 'accertamento',
+                ];
+            }
+
+            $totale += $totaleAnno;
+        }
+
+        return [
+            'dettaglio_anni' => $dettaglioAnni,
+            'totale_recuperabile' => round($totale, 2),
+            'anni_mancanti' => $anniMancanti,
+        ];
+    }
+
+    /**
+     * Scaglione più vicino ai componenti reali per quella categoria/anno: se i
+     * componenti reali superano lo scaglione massimo importato (es. "6 o più
+     * componenti"), scende finché non trova uno scaglione presente in tariffario.
+     */
+    private function tariffaScaglioneComponenti(int $anno, string $categoria, int $componentiReali): ?float
+    {
+        for ($n = max($componentiReali, 1); $n >= 1; $n--) {
+            $tariffa = $this->tariffaAnno($anno, $categoria.'.'.$n, 'variabile');
+            if ($tariffa !== null) {
+                return $tariffa;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int,string|null>  $riduzioniApplicate
+     * @return array<int,string|null>
+     */
+    private function escludiUnicoOccupante(array $riduzioniApplicate, int $componentiReali): array
+    {
+        if ($componentiReali <= 1) {
+            return $riduzioniApplicate;
+        }
+
+        return array_map(
+            fn (?string $nome) => ($nome !== null && str_contains(mb_strtolower(trim($nome)), 'unico occupante')) ? null : $nome,
+            $riduzioniApplicate
+        );
+    }
+
     private function tariffaAnno(int $anno, string $codiceTariffa, string $tipoQuota): ?float
     {
         $chiave = $anno.'|'.$codiceTariffa.'|'.$tipoQuota;
@@ -169,11 +284,14 @@ class RecuperoCalculator
     }
 
     /**
-     * @param array<int,string|null> $riduzioniApplicate
+     * @param  array<int,string|null>  $riduzioniApplicate
      */
     private function riduzionePercentuale(int $anno, array $riduzioniApplicate, string $tipoQuota): float
     {
-        $nomi = array_values(array_filter(array_map('trim', $riduzioniApplicate)));
+        $nomi = array_values(array_filter(array_map(
+            static fn (?string $nome) => $nome !== null ? trim($nome) : null,
+            $riduzioniApplicate
+        )));
         if ($nomi === []) {
             return 0.0;
         }

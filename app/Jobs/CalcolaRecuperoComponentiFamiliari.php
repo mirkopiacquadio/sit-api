@@ -27,9 +27,11 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 3600;
+
     public $tries = 1;
 
     private const CATEGORIE_ESCLUSE_PREFISSO = ['B', 'D', 'F'];
+
     private const CATEGORIE_ESCLUSE_ESATTE = ['C01', 'C/01'];
 
     public function __construct(
@@ -40,8 +42,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
         private string $batchAnagrafeResidenti,
         private ?string $batchAnagrafeFamiglie,
         private ?string $batchGruppiFamiglia
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {
@@ -129,11 +130,10 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
 
                 $dettaglio = $dettagli->get($immobile->codice_utenza);
 
-                $esito = $calcolatore->calcola(
-                    (float) $componentiDiff,
+                $esito = $calcolatore->calcolaComponenti(
                     $dettaglio->codice_tariffa ?? null,
+                    $componentiReali,
                     $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
-                    'variabile',
                     $dettaglio ? [$dettaglio->riduzione_1, $dettaglio->riduzione_2, $dettaglio->riduzione_3] : []
                 );
 

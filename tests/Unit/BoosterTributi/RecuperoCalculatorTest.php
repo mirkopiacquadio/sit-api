@@ -130,4 +130,68 @@ class RecuperoCalculatorTest extends TestCase
         $this->assertSame(0.0, $esito['totale_recuperabile']);
         $this->assertSame([2026], $esito['anni_mancanti']);
     }
+
+    /**
+     * Caso reale segnalato dal cliente (annotazioni 2026-09-27): passaggio da 1 a 3
+     * componenti, tariffario File 3 vero (scaglioni non lineari). Il dovuto deve
+     * essere la differenza tra gli scaglioni, non componenti_diff × tariffa di uno
+     * scaglione: 398,126299 - 156,171089 = 241,95521.
+     */
+    public function test_calcola_componenti_usa_la_differenza_tra_scaglioni_non_lineare(): void
+    {
+        $tariffe = [2026 => [
+            '1.1' => ['variabile' => 156.171089],
+            '1.2' => ['variabile' => 307.942993],
+            '1.3' => ['variabile' => 398.126299],
+        ]];
+        $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
+
+        $esito = $calc->calcolaComponenti('1.1', 3, '2026-01-01');
+
+        // arrotondato a 2 decimali (valuta), come tutti gli altri importi della classe.
+        $this->assertEqualsWithDelta(241.96, $esito['totale_recuperabile'], 0.001);
+        $this->assertSame('ruolo', $esito['dettaglio_anni'][2026]['tipo']);
+    }
+
+    public function test_calcola_componenti_esclude_riduzione_unico_occupante_se_componenti_reali_maggiori_di_uno(): void
+    {
+        $tariffe = [2026 => [
+            '1.1' => ['variabile' => 100.0],
+            '1.3' => ['variabile' => 300.0],
+        ]];
+        $riduzioni = [
+            ['anno' => 2026, 'descrizione' => 'Unico occupante', 'percentuale' => 20.0, 'applicazione' => 'Tariffa variabile'],
+            ['anno' => 2026, 'descrizione' => 'Compostaggio', 'percentuale' => 30.0, 'applicazione' => 'Tariffa variabile'],
+        ];
+        $calc = $this->calcolatore($tariffe, $riduzioni, annoCorrente: 2026);
+
+        $esito = $calc->calcolaComponenti('1.1', 3, '2026-01-01', ['Unico occupante', 'Compostaggio']);
+
+        // dovuto = (300 - 100) * (1 - 0.30) = 140: "Unico occupante" esclusa, "Compostaggio" resta applicata.
+        $this->assertEqualsWithDelta(140.0, $esito['totale_recuperabile'], 0.001);
+    }
+
+    public function test_calcola_componenti_scende_di_scaglione_se_componenti_reali_superano_il_massimo_importato(): void
+    {
+        // Tariffario importato solo fino a 6 componenti ("sei o più"): 8 reali deve ricadere sullo scaglione 6.
+        $tariffe = [2026 => [
+            '1.1' => ['variabile' => 100.0],
+            '1.6' => ['variabile' => 500.0],
+        ]];
+        $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
+
+        $esito = $calc->calcolaComponenti('1.1', 8, '2026-01-01');
+
+        $this->assertEqualsWithDelta(400.0, $esito['totale_recuperabile'], 0.001);
+    }
+
+    public function test_calcola_componenti_codice_dichiarato_mancante_esclude_tutti_gli_anni(): void
+    {
+        $calc = $this->calcolatore(tariffe: [], annoCorrente: 2026);
+
+        $esito = $calc->calcolaComponenti(null, 3, '2026-01-01');
+
+        $this->assertSame(0.0, $esito['totale_recuperabile']);
+        $this->assertSame([2026], $esito['anni_mancanti']);
+    }
 }
