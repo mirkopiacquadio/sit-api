@@ -23,21 +23,19 @@ class ComponentiFamiliariTest extends TestCase
             ['UN COMPONENTE', 1],
             ['Sei o più componenti', 6],
             ['Unico occupante', 1],
+            ['Sei o piu` componenti', 6],
             ['Abitazione', null],
             ['', null],
             [null, null],
         ];
     }
 
-    public function test_dichiarati_preferisce_sottocategoria_file2_al_file1(): void
+    public function test_dichiarati_solo_da_sottocategoria_file2(): void
     {
-        $immobile = (object) ['componenti_residenti' => 3];
-
-        $this->assertSame(2, ComponentiFamiliari::dichiarati((object) ['sottocategoria' => 'Due componenti', 'codice_tariffa' => '1.2'], $immobile));
-        // sottocategoria illeggibile -> scaglione dal codice tariffa
-        $this->assertSame(4, ComponentiFamiliari::dichiarati((object) ['sottocategoria' => 'Domestica', 'codice_tariffa' => '1.4'], $immobile));
-        // nessun File 2 -> File 1
-        $this->assertSame(3, ComponentiFamiliari::dichiarati(null, $immobile));
+        $this->assertSame(6, ComponentiFamiliari::dichiarati((object) ['sottocategoria' => 'Sei o piu` componenti']));
+        // utenza non domestica: non confrontabile (niente ripiego sul codice tariffa "2.18" -> 18)
+        $this->assertNull(ComponentiFamiliari::dichiarati((object) ['sottocategoria' => 'Uffici,agenzie']));
+        $this->assertNull(ComponentiFamiliari::dichiarati(null));
     }
 
     public function test_immobile_analizzabile_solo_persone_fisiche_categorie_abitative(): void
@@ -49,15 +47,48 @@ class ComponentiFamiliariTest extends TestCase
         $this->assertFalse(ComponentiFamiliari::immobileAnalizzabile((object) ['tipo_persona' => 'G', 'categoria_catastale' => 'A/2']));
     }
 
-    public function test_reali_da_file8_con_cf_non_normalizzato(): void
+    private function residente(array $campi): object
     {
-        $componenti = new ComponentiFamiliari(
-            collect(['RSSMRA80A01H501U' => (object) ['numero_famiglia' => 10, 'indirizzo_residenza' => 'VIA ROMA 1']]),
-            collect([10 => (object) ['n_componenti' => 4]]),
-            null
-        );
+        return (object) array_merge([
+            'codice_fiscale' => null, 'codice_famiglia' => null, 'n_componenti' => null, 'indirizzo_attuale' => null,
+            'data_nascita' => null, 'data_decesso' => null, 'data_immigrazione' => null, 'data_variazione_indirizzo' => null,
+        ], $campi);
+    }
 
-        $this->assertSame(['n' => 4, 'indirizzo' => 'VIA ROMA 1'], $componenti->reali(' rssmra80a01h501u '));
+    public function test_reali_dal_file6_con_cf_non_normalizzato_e_data_piu_recente_del_nucleo(): void
+    {
+        $componenti = new ComponentiFamiliari(collect([
+            $this->residente(['codice_fiscale' => 'RSSMRA80A01H501U', 'codice_famiglia' => '10', 'n_componenti' => 3, 'indirizzo_attuale' => 'VIA ROMA 1', 'data_nascita' => '1980-01-01', 'data_immigrazione' => '2015-03-10']),
+            $this->residente(['codice_fiscale' => 'BNCLRA82B41H501X', 'codice_famiglia' => '10', 'n_componenti' => 3, 'data_nascita' => '1982-02-01', 'data_variazione_indirizzo' => '2019-06-01']),
+            // figlio nato nel 2023: è la variazione più recente del nucleo
+            $this->residente(['codice_fiscale' => 'RSSLCU23C10H501Z', 'codice_famiglia' => '10', 'n_componenti' => 3, 'data_nascita' => '2023-03-10']),
+            // altra famiglia: non deve contare
+            $this->residente(['codice_fiscale' => 'VRDGPP90A01H501K', 'codice_famiglia' => '11', 'n_componenti' => 1, 'data_immigrazione' => '2025-01-01']),
+        ]));
+
+        $this->assertSame(
+            ['n' => 3, 'indirizzo' => 'VIA ROMA 1', 'data_variazione_nucleo' => '2023-03-10'],
+            $componenti->reali(' rssmra80a01h501u ')
+        );
         $this->assertNull($componenti->reali('XXXXXX00X00X000X'));
+    }
+
+    public function test_residente_deceduto_non_viene_confrontato(): void
+    {
+        $componenti = new ComponentiFamiliari(collect([
+            $this->residente(['codice_fiscale' => 'RSSMRA40A01H501U', 'codice_famiglia' => '5', 'n_componenti' => 2, 'data_decesso' => '2024-05-01']),
+        ]));
+
+        $this->assertNull($componenti->reali('RSSMRA40A01H501U'));
+    }
+
+    public function test_data_variazione_nucleo_ignora_i_deceduti(): void
+    {
+        $data = ComponentiFamiliari::dataVariazioneNucleo(collect([
+            $this->residente(['data_nascita' => '1950-01-01', 'data_immigrazione' => '2010-05-05']),
+            $this->residente(['data_nascita' => '1940-01-01', 'data_variazione_indirizzo' => '2024-01-01', 'data_decesso' => '2024-02-01']),
+        ]));
+
+        $this->assertSame('2010-05-05', $data);
     }
 }

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class BoosterTributiController extends Controller
@@ -175,7 +176,7 @@ class BoosterTributiController extends Controller
         }
     }
 
-    public function importaAnagrafeFamiglie(Request $request, string $comune)
+    public function importaAnagrafeResidenza(Request $request, string $comune)
     {
         $path = null;
 
@@ -183,55 +184,11 @@ class BoosterTributiController extends Controller
             $this->setComune($comune);
             $path = $this->fileTemporaneo($request, 'file');
 
-            $esito = (new TariImportService())->importaFile6AnagrafeFamiglie($path);
+            $esito = (new TariImportService())->importaFile6AnagrafeResidenza($path);
 
             return response()->json(['success' => true, 'import' => $esito]);
         } catch (\Throwable $e) {
-            Log::error('BoosterTributi importaAnagrafeFamiglie: '.$e->getMessage());
-
-            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
-        } finally {
-            if ($path) {
-                $this->eliminaTemporaneo($path);
-            }
-        }
-    }
-
-    public function importaAnagrafeResidenti(Request $request, string $comune)
-    {
-        $path = null;
-
-        try {
-            $this->setComune($comune);
-            $path = $this->fileTemporaneo($request, 'file');
-
-            $esito = (new TariImportService())->importaFile7AnagrafeResidenti($path);
-
-            return response()->json(['success' => true, 'import' => $esito]);
-        } catch (\Throwable $e) {
-            Log::error('BoosterTributi importaAnagrafeResidenti: '.$e->getMessage());
-
-            return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
-        } finally {
-            if ($path) {
-                $this->eliminaTemporaneo($path);
-            }
-        }
-    }
-
-    public function importaGruppiFamiglia(Request $request, string $comune)
-    {
-        $path = null;
-
-        try {
-            $this->setComune($comune);
-            $path = $this->fileTemporaneo($request, 'file');
-
-            $esito = (new TariImportService())->importaFile8GruppiFamiglia($path);
-
-            return response()->json(['success' => true, 'import' => $esito]);
-        } catch (\Throwable $e) {
-            Log::error('BoosterTributi importaGruppiFamiglia: '.$e->getMessage());
+            Log::error('BoosterTributi importaAnagrafeResidenza: '.$e->getMessage());
 
             return response()->json(['success' => false, 'error' => $this->messaggioErrore($e)], 500);
         } finally {
@@ -438,27 +395,17 @@ class BoosterTributiController extends Controller
 
         $batchImmobili = $this->ultimoBatch('file1_immobili');
         $batchDettaglio = $this->ultimoBatch('file2_dettaglio_sottocategoria');
-        $batchResidenti = $this->ultimoBatch('file7_anagrafe_residenti');
-        $batchFamiglie = $this->ultimoBatch('file6_anagrafe_famiglie');
-        $batchGruppi = $this->ultimoBatch('file8_gruppi_famiglia');
+        $batchResidenza = $this->ultimoBatch('file6_anagrafe_residenza');
 
-        if (! $batchImmobili || ! $batchDettaglio || ! $batchResidenti || (! $batchFamiglie && ! $batchGruppi)) {
+        if (! $batchImmobili || ! $batchDettaglio || ! $batchResidenza) {
             return response()->json([
                 'success' => false,
-                'error' => 'Servono File 1, File 2, File 7 e almeno uno tra File 6/File 8 importati per questo comune.',
+                'error' => 'Servono File 1, File 2 e File 6 (Dati anagrafici residenza) importati per questo comune.',
             ], 422);
         }
 
         $jobKey = (string) Str::uuid();
-        CalcolaRecuperoComponentiFamiliari::dispatch(
-            $comune,
-            $jobKey,
-            $batchImmobili,
-            $batchDettaglio,
-            $batchResidenti,
-            $batchFamiglie,
-            $batchGruppi
-        );
+        CalcolaRecuperoComponentiFamiliari::dispatch($comune, $jobKey, $batchImmobili, $batchDettaglio, $batchResidenza);
 
         return response()->json(['success' => true, 'job_key' => $jobKey]);
     }
@@ -521,6 +468,8 @@ class BoosterTributiController extends Controller
                 'bt_recupero_componenti.componenti_diff',
                 'bt_recupero_componenti.match_residenza_ubicazione',
                 'bt_recupero_componenti.data_inizio_validita as data_inizio_validita_recupero',
+                'bt_recupero_componenti.data_variazione_nucleo',
+                'bt_recupero_componenti.data_inizio_recupero',
                 'bt_recupero_componenti.dettaglio_anni',
                 'bt_recupero_componenti.totale_recuperabile',
                 'bt_recupero_componenti.totale_con_sanzioni_interessi'
@@ -559,7 +508,13 @@ class BoosterTributiController extends Controller
         $tabella = $tipo === 'mq' ? 'bt_recupero_mq' : 'bt_recupero_componenti';
         $colonneDiff = $tipo === 'mq'
             ? ["{$tabella}.mq_diff"]
-            : ["{$tabella}.componenti_dichiarati", "{$tabella}.componenti_diff"];
+            : [
+                "{$tabella}.componenti_dichiarati",
+                "{$tabella}.componenti_diff",
+                "{$tabella}.match_residenza_ubicazione",
+                "{$tabella}.data_variazione_nucleo",
+                "{$tabella}.data_inizio_recupero",
+            ];
 
         $righe = DB::table($tabella)
             ->where("{$tabella}.import_batch_id", $batchImmobili)
@@ -597,6 +552,9 @@ class BoosterTributiController extends Controller
         } else {
             $intestazione[] = 'Componenti dichiarati TARI';
             $intestazione[] = 'Differenza componenti';
+            $intestazione[] = 'Ultima variazione nucleo';
+            $intestazione[] = 'Inizio recupero';
+            $intestazione[] = 'ALERT ubicazione ≠ residenza';
         }
         foreach ($anni as $anno) {
             $intestazione[] = "Recuperabile {$anno}";
@@ -625,6 +583,9 @@ class BoosterTributiController extends Controller
             } else {
                 $colonne[] = $riga->componenti_dichiarati;
                 $colonne[] = $riga->componenti_diff;
+                $colonne[] = $riga->data_variazione_nucleo;
+                $colonne[] = $riga->data_inizio_recupero;
+                $colonne[] = $riga->match_residenza_ubicazione === false ? 'SÌ - possibile seconda casa' : '';
             }
             foreach ($anni as $anno) {
                 if (isset($dettaglio[$anno]['errore'])) {
@@ -640,6 +601,14 @@ class BoosterTributiController extends Controller
             $colonne[] = $riga->totale_con_sanzioni_interessi;
 
             $sheet->fromArray($colonne, null, "A{$rigaExcel}");
+            // Istruzioni cliente: differenza con ubicazione diversa dalla residenza
+            // (possibile seconda casa) evidenziata in grassetto.
+            if ($tipo === 'componenti' && $riga->match_residenza_ubicazione === false) {
+                $ultimaColonna = Coordinate::stringFromColumnIndex(count($intestazione));
+                $stile = $sheet->getStyle("A{$rigaExcel}:{$ultimaColonna}{$rigaExcel}");
+                $stile->getFont()->setBold(true);
+                $stile->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
+            }
             $rigaExcel++;
         }
 

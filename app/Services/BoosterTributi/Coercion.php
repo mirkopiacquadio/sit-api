@@ -77,6 +77,20 @@ class Coercion
             return null;
         }
 
+        // Formato italiano gg/mm/aaaa (anche con - o . e orario in coda): gli
+        // export Halley HTML hanno le date come testo e strtotime() le leggerebbe
+        // all'americana (01/12/2026 -> 12 gennaio, 25/12/2026 -> false).
+        if (preg_match('#^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?:\s|$)#', $valore, $m)) {
+            $anno = strlen($m[3]) === 2 ? 2000 + (int) $m[3] : (int) $m[3];
+            if ($anno > (int) date('Y') + 1 && strlen($m[3]) === 2) {
+                $anno -= 100;
+            }
+
+            return checkdate((int) $m[2], (int) $m[1], $anno)
+                ? sprintf('%04d-%02d-%02d', $anno, (int) $m[2], (int) $m[1])
+                : null;
+        }
+
         $timestamp = strtotime($valore);
 
         return $timestamp === false ? null : date('Y-m-d', $timestamp);

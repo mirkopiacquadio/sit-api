@@ -172,91 +172,54 @@ class TariImportService
         return ['batch_id' => $batchId, 'righe' => count($insert)];
     }
 
-    public function importaFile6AnagrafeFamiglie(string $path): array
+    /**
+     * "File 6 - Dati anagrafici residenza", colonne A-S: codice utente,
+     * cognome e nome, CF, data nascita, data decesso, data immigrazione,
+     * indirizzo attuale, data variazione indirizzo, indirizzo precedente,
+     * foglio/particella/sub attuali, foglio/particella/sub precedenti, codice
+     * famiglia, intestatario scheda famiglia, n. componenti, CF intestatario.
+     */
+    public function importaFile6AnagrafeResidenza(string $path): array
     {
         $righe = ExcelImportReader::righeDati($path);
-        $batchId = $this->creaBatch('file6_anagrafe_famiglie');
+        $batchId = $this->creaBatch('file6_anagrafe_residenza');
 
         $insert = [];
         foreach ($righe as $riga) {
-            $numeroFamiglia = Coercion::intero($riga[1] ?? null);
-            if ($numeroFamiglia === null) {
+            $codiceFiscale = Coercion::stringa($riga[2] ?? null);
+            $codiceFamiglia = Coercion::stringa($riga[15] ?? null);
+            if ($codiceFiscale === null && $codiceFamiglia === null) {
                 continue;
             }
 
             $now = now();
             $insert[] = [
                 'import_batch_id' => $batchId,
-                'numero_famiglia' => $numeroFamiglia,
-                'intestatario' => Coercion::stringa($riga[3] ?? null),
-                'codice_fiscale' => Coercion::stringa($riga[5] ?? null),
-                'indirizzo' => Coercion::stringa($riga[8] ?? null),
-                'n_componenti' => Coercion::intero($riga[9] ?? null) ?? 0,
+                'codice_utente' => Coercion::stringa($riga[0] ?? null),
+                'nominativo' => Coercion::stringa($riga[1] ?? null),
+                'codice_fiscale' => $codiceFiscale,
+                'data_nascita' => Coercion::data($riga[3] ?? null),
+                'data_decesso' => Coercion::data($riga[4] ?? null),
+                'data_immigrazione' => Coercion::data($riga[5] ?? null),
+                'indirizzo_attuale' => Coercion::stringa($riga[6] ?? null),
+                'data_variazione_indirizzo' => Coercion::data($riga[7] ?? null),
+                'indirizzo_precedente' => Coercion::stringa($riga[8] ?? null),
+                'foglio_attuale' => Coercion::stringa($riga[9] ?? null),
+                'particella_attuale' => Coercion::stringa($riga[10] ?? null),
+                'sub_attuale' => Coercion::stringa($riga[11] ?? null),
+                'foglio_precedente' => Coercion::stringa($riga[12] ?? null),
+                'particella_precedente' => Coercion::stringa($riga[13] ?? null),
+                'sub_precedente' => Coercion::stringa($riga[14] ?? null),
+                'codice_famiglia' => $codiceFamiglia,
+                'intestatario_famiglia' => Coercion::stringa($riga[16] ?? null),
+                'n_componenti' => Coercion::intero($riga[17] ?? null),
+                'codice_fiscale_intestatario' => Coercion::stringa($riga[18] ?? null),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
         }
 
-        $this->inserisci('bt_anagrafe_famiglie', $insert);
-        $this->chiudiBatch($batchId, count($insert));
-
-        return ['batch_id' => $batchId, 'righe' => count($insert)];
-    }
-
-    public function importaFile7AnagrafeResidenti(string $path): array
-    {
-        $righe = ExcelImportReader::righeDati($path);
-        $batchId = $this->creaBatch('file7_anagrafe_residenti');
-
-        $insert = [];
-        foreach ($righe as $riga) {
-            $numeroFamiglia = Coercion::intero($riga[2] ?? null);
-            if ($numeroFamiglia === null) {
-                continue;
-            }
-
-            $now = now();
-            $insert[] = [
-                'import_batch_id' => $batchId,
-                'numero_famiglia' => $numeroFamiglia,
-                'nominativo' => Coercion::stringa($riga[3] ?? null),
-                'codice_fiscale' => Coercion::stringa($riga[10] ?? null),
-                'indirizzo_residenza' => Coercion::stringa($riga[9] ?? null),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        $this->inserisci('bt_anagrafe_residenti', $insert);
-        $this->chiudiBatch($batchId, count($insert));
-
-        return ['batch_id' => $batchId, 'righe' => count($insert)];
-    }
-
-    public function importaFile8GruppiFamiglia(string $path): array
-    {
-        $righe = ExcelImportReader::righeDati($path);
-        $batchId = $this->creaBatch('file8_gruppi_famiglia');
-
-        $insert = [];
-        foreach ($righe as $riga) {
-            $numeroFamiglia = Coercion::intero($riga[0] ?? null);
-            if ($numeroFamiglia === null) {
-                continue;
-            }
-
-            $now = now();
-            $insert[] = [
-                'import_batch_id' => $batchId,
-                'numero_famiglia' => $numeroFamiglia,
-                'n_componenti' => Coercion::intero($riga[1] ?? null) ?? 0,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        DB::connection(self::CONNECTION)->table('bt_anagrafe_gruppi_famiglia')->truncate();
-        $this->inserisci('bt_anagrafe_gruppi_famiglia', $insert);
+        $this->inserisci('bt_anagrafe_residenza', $insert);
         $this->chiudiBatch($batchId, count($insert));
 
         return ['batch_id' => $batchId, 'righe' => count($insert)];
@@ -288,7 +251,7 @@ class TariImportService
     }
 
     /**
-     * @param array<int,array<string,mixed>> $righe
+     * @param  array<int,array<string,mixed>>  $righe
      */
     private function inserisci(string $tabella, array $righe): void
     {

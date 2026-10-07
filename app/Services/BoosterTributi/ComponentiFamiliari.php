@@ -10,12 +10,17 @@ use Illuminate\Support\Facades\DB;
  * dal Job CalcolaRecuperoComponentiFamiliari (differenze in positivo, da recuperare)
  * e dall'AnomalyDetector (differenze in negativo, contate nella fotografia).
  *
- * - Dichiarati: sottocategoria della scheda TARI (File 2, colonna Q), cioè lo
- *   scaglione per cui il contribuente è davvero tassato in quota variabile; il
- *   numero componenti del File 1 può essere inserito male dall'operatore comunale
- *   (annotazioni cliente 2026-10-05, punto 5). Fallback: suffisso del codice
- *   tariffa (stesso scaglione), poi File 1.
- * - Reali: CF -> famiglia (File 7) -> n. componenti dal File 8, fallback File 6.
+ * - Dichiarati: sottocategoria della scheda TARI (File 2, colonna Q, es. "Sei o
+ *   piu` componenti"), cioè lo scaglione per cui il contribuente è davvero tassato
+ *   in quota variabile; il numero componenti del File 1 può essere inserito male
+ *   dall'operatore comunale (annotazioni cliente 2026-10-05, punto 5: sui dati
+ *   reali di Sant'Agata differisce in ~830 utenze).
+ * - Reali: CF -> riga del "File 6 - Dati anagrafici residenza" -> n. componenti
+ *   del nucleo (col. R) e residenza attuale (col. G).
+ * - Data variazione nucleo: la più recente, tra tutti i componenti vivi dello
+ *   stesso codice famiglia (col. P), di data immigrazione (F), data variazione
+ *   indirizzo (H) e data di nascita (D): il recupero componenti non può partire
+ *   prima (istruzioni cliente 2026-10-07, punto 4).
  */
 class ComponentiFamiliari
 {
@@ -29,39 +34,33 @@ class ComponentiFamiliari
         'sette' => 7, 'otto' => 8, 'nove' => 9, 'dieci' => 10,
     ];
 
-    /**
-     * @param  Collection<string,object>  $residenti  File 7 indicizzato per CF normalizzato
-     * @param  Collection<int,object>|null  $gruppiPerFamiglia  File 8 per numero_famiglia
-     * @param  Collection<int,object>|null  $famigliePerNumero  File 6 per numero_famiglia
-     */
-    public function __construct(
-        private Collection $residenti,
-        private ?Collection $gruppiPerFamiglia,
-        private ?Collection $famigliePerNumero
-    ) {}
+    /** @var Collection<string,object> */
+    private Collection $perCodiceFiscale;
 
-    public static function daBatch(string $batchResidenti, ?string $batchFamiglie, ?string $batchGruppi): self
+    /** @var Collection<string,Collection<int,object>> */
+    private Collection $perFamiglia;
+
+    /**
+     * @param  Collection<int,object>  $righeResidenza  righe bt_anagrafe_residenza di un batch
+     */
+    public function __construct(Collection $righeResidenza)
     {
-        $residenti = DB::connection('pgsql')->table('bt_anagrafe_residenti')
-            ->where('import_batch_id', $batchResidenti)
-            ->get()
+        $this->perCodiceFiscale = $righeResidenza
+            ->filter(fn ($r) => self::normalizzaCf($r->codice_fiscale) !== null)
             ->keyBy(fn ($r) => self::normalizzaCf($r->codice_fiscale));
 
-        $gruppi = $batchGruppi
-            ? DB::connection('pgsql')->table('bt_anagrafe_gruppi_famiglia')
-                ->where('import_batch_id', $batchGruppi)
-                ->get()
-                ->keyBy('numero_famiglia')
-            : null;
+        $this->perFamiglia = $righeResidenza
+            ->filter(fn ($r) => $r->codice_famiglia !== null)
+            ->groupBy(fn ($r) => trim((string) $r->codice_famiglia));
+    }
 
-        $famiglie = $batchFamiglie
-            ? DB::connection('pgsql')->table('bt_anagrafe_famiglie')
-                ->where('import_batch_id', $batchFamiglie)
+    public static function daBatch(string $batchResidenza): self
+    {
+        return new self(
+            DB::connection('pgsql')->table('bt_anagrafe_residenza')
+                ->where('import_batch_id', $batchResidenza)
                 ->get()
-                ->keyBy('numero_famiglia')
-            : null;
-
-        return new self($residenti, $gruppi, $famiglie);
+        );
     }
 
     /**
@@ -73,7 +72,7 @@ class ComponentiFamiliari
     }
 
     /**
-     * @return array{n: int, indirizzo: ?string}|null null se il CF non è in anagrafe o la famiglia non è nei File 6/8
+     * @return array{n: int, indirizzo: ?string, data_variazione_nucleo: ?string}|null null se il CF non è in anagrafe o manca il n. componenti
      */
     public function reali(?string $codiceFiscale): ?array
     {
@@ -82,37 +81,54 @@ class ComponentiFamiliari
             return null;
         }
 
-        $residente = $this->residenti->get($cf);
-        if ($residente === null) {
+        $residente = $this->perCodiceFiscale->get($cf);
+        // Il File 6 contiene anche i deceduti: il loro n. componenti non descrive
+        // un nucleo attuale (l'intestatario TARI deceduto è già nella fotografia).
+        if ($residente === null || $residente->n_componenti === null || ! empty($residente->data_decesso)) {
             return null;
         }
 
-        $indirizzo = $residente->indirizzo_residenza;
+        $famiglia = $residente->codice_famiglia !== null
+            ? $this->perFamiglia->get(trim((string) $residente->codice_famiglia), collect([$residente]))
+            : collect([$residente]);
 
-        if ($this->gruppiPerFamiglia && $this->gruppiPerFamiglia->has($residente->numero_famiglia)) {
-            return ['n' => (int) $this->gruppiPerFamiglia->get($residente->numero_famiglia)->n_componenti, 'indirizzo' => $indirizzo];
-        }
-
-        if ($this->famigliePerNumero && $this->famigliePerNumero->has($residente->numero_famiglia)) {
-            $famiglia = $this->famigliePerNumero->get($residente->numero_famiglia);
-
-            return ['n' => (int) $famiglia->n_componenti, 'indirizzo' => $indirizzo ?: $famiglia->indirizzo];
-        }
-
-        return null;
+        return [
+            'n' => (int) $residente->n_componenti,
+            'indirizzo' => $residente->indirizzo_attuale,
+            'data_variazione_nucleo' => self::dataVariazioneNucleo($famiglia),
+        ];
     }
 
-    public static function dichiarati(?object $dettaglio, object $immobile): int
+    /**
+     * @param  Collection<int,object>  $componenti
+     */
+    public static function dataVariazioneNucleo(Collection $componenti): ?string
     {
-        if ($dettaglio !== null) {
-            $n = self::numeroDaSottocategoria($dettaglio->sottocategoria)
-                ?? self::numeroDaCodiceTariffa($dettaglio->codice_tariffa);
-            if ($n !== null) {
-                return $n;
+        $date = [];
+        foreach ($componenti as $componente) {
+            if (! empty($componente->data_decesso)) {
+                continue;
+            }
+
+            foreach (['data_immigrazione', 'data_variazione_indirizzo', 'data_nascita'] as $campo) {
+                if (! empty($componente->{$campo})) {
+                    $date[] = substr((string) $componente->{$campo}, 0, 10);
+                }
             }
         }
 
-        return (int) $immobile->componenti_residenti;
+        return $date === [] ? null : max($date);
+    }
+
+    /**
+     * null = utenza non confrontabile: manca la riga File 2, oppure la
+     * sottocategoria non indica un numero di componenti (utenza non domestica,
+     * es. "Uffici,agenzie", "Autorimesse e magazzini..." anche se intestata a
+     * persona fisica con categoria catastale abitativa/pertinenza).
+     */
+    public static function dichiarati(?object $dettaglio): ?int
+    {
+        return $dettaglio !== null ? self::numeroDaSottocategoria($dettaglio->sottocategoria) : null;
     }
 
     /**
@@ -138,20 +154,6 @@ class ComponentiFamiliari
         }
 
         return null;
-    }
-
-    /**
-     * Codice tariffa "categoria.sottocategoria" (es. "1.3"): per le utenze
-     * domestiche la sottocategoria è lo scaglione componenti (vedi
-     * RecuperoCalculator::tariffaScaglioneComponenti).
-     */
-    public static function numeroDaCodiceTariffa(?string $codiceTariffa): ?int
-    {
-        if ($codiceTariffa === null || ! preg_match('/^\s*\d+\.(\d+)\s*$/', $codiceTariffa, $m)) {
-            return null;
-        }
-
-        return (int) $m[1];
     }
 
     /**

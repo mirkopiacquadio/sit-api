@@ -40,4 +40,23 @@ class AddressNormalizerTest extends TestCase
         $this->assertFalse(AddressNormalizer::corrispondono(null, 'Via Roma 12'));
         $this->assertFalse(AddressNormalizer::corrispondono('', 'Via Roma 12'));
     }
+
+    /**
+     * Casi reali Sant'Agata de' Goti (File 1 vs File 6 "Dati anagrafici residenza").
+     */
+    public function test_casi_reali_piano_interno_scala_e_snc(): void
+    {
+        $this->assertTrue(AddressNormalizer::corrispondono('Via Domenico mustilli n. 14 p. 2 i. 3', 'VIA DOMENICO MUSTILLI 14 I. 3 P. 2'));
+        $this->assertTrue(AddressNormalizer::corrispondono('Via Domenico mustilli n. 2 s. A p. 1 i. 03', 'VIA DOMENICO MUSTILLI 2 I. 03 P. 1 S. A'));
+        $this->assertTrue(AddressNormalizer::corrispondono('Via Santisi', 'VIA SANTISI SNC'));
+        $this->assertTrue(AddressNormalizer::corrispondono('Via Pennino', 'VIA PENNINO 42'));
+        $this->assertTrue(AddressNormalizer::corrispondono('Via S.antonio abate n. 13', "VIA SANT'ANTONIO ABATE 13"));
+        $this->assertTrue(AddressNormalizer::corrispondono('Via 4 novembre n. 12', 'VIA 4 NOVEMBRE 12'));
+    }
+
+    public function test_stessa_via_civico_diverso_non_corrisponde(): void
+    {
+        $this->assertFalse(AddressNormalizer::corrispondono('Via Domenico mustilli n. 30 p. S1', 'VIA DOMENICO MUSTILLI 14'));
+        $this->assertFalse(AddressNormalizer::corrispondono('Piazza Trento n. 12', 'VIA LUIGI EINAUDI 17'));
+    }
 }

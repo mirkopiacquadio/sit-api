@@ -21,9 +21,7 @@ class ComuneSchema
         self::tariDettaglioSottocategoria();
         self::tariffario();
         self::riduzioni();
-        self::anagrafeFamiglie();
-        self::anagrafeResidenti();
-        self::anagrafeGruppiFamiglia();
+        self::anagrafeResidenza();
         self::anomalieSnapshot();
         self::recuperoMq();
         self::recuperoComponenti();
@@ -49,6 +47,14 @@ class ComuneSchema
             if (! $schema->hasColumn($tabella, 'data_inizio_validita')) {
                 $schema->table($tabella, function (Blueprint $table) {
                     $table->date('data_inizio_validita')->nullable();
+                });
+            }
+        }
+
+        foreach (['data_variazione_nucleo', 'data_inizio_recupero'] as $colonna) {
+            if (! $schema->hasColumn('bt_recupero_componenti', $colonna)) {
+                $schema->table('bt_recupero_componenti', function (Blueprint $table) use ($colonna) {
+                    $table->date($colonna)->nullable();
                 });
             }
         }
@@ -178,53 +184,43 @@ class ComuneSchema
         });
     }
 
-    private static function anagrafeFamiglie(): void
+    /**
+     * "File 6 - Dati anagrafici residenza" (annotazioni cliente 2026-10-07):
+     * sostituisce i vecchi File 6/7/8 (bt_anagrafe_famiglie/residenti/
+     * gruppi_famiglia, lasciate sui DB già esistenti ma non più usate). Una riga
+     * per residente, con codice famiglia e n. componenti del nucleo.
+     */
+    private static function anagrafeResidenza(): void
     {
-        if (Schema::connection(self::CONNECTION)->hasTable('bt_anagrafe_famiglie')) {
+        if (Schema::connection(self::CONNECTION)->hasTable('bt_anagrafe_residenza')) {
             return;
         }
 
-        Schema::connection(self::CONNECTION)->create('bt_anagrafe_famiglie', function (Blueprint $table) {
+        Schema::connection(self::CONNECTION)->create('bt_anagrafe_residenza', function (Blueprint $table) {
             $table->id();
             $table->uuid('import_batch_id')->index();
-            $table->unsignedBigInteger('numero_famiglia')->index();
-            $table->string('intestatario')->nullable();
-            $table->string('codice_fiscale', 20)->nullable()->index();
-            $table->string('indirizzo')->nullable();
-            $table->unsignedInteger('n_componenti')->default(0);
-            $table->timestamps();
-        });
-    }
-
-    private static function anagrafeResidenti(): void
-    {
-        if (Schema::connection(self::CONNECTION)->hasTable('bt_anagrafe_residenti')) {
-            return;
-        }
-
-        Schema::connection(self::CONNECTION)->create('bt_anagrafe_residenti', function (Blueprint $table) {
-            $table->id();
-            $table->uuid('import_batch_id')->index();
-            $table->unsignedBigInteger('numero_famiglia')->index();
+            $table->string('codice_utente', 30)->nullable();
             $table->string('nominativo')->nullable();
             $table->string('codice_fiscale', 20)->nullable()->index();
-            $table->string('indirizzo_residenza')->nullable();
+            $table->date('data_nascita')->nullable();
+            $table->date('data_decesso')->nullable();
+            $table->date('data_immigrazione')->nullable();
+            $table->string('indirizzo_attuale')->nullable();
+            $table->date('data_variazione_indirizzo')->nullable();
+            $table->string('indirizzo_precedente')->nullable();
+            $table->string('foglio_attuale', 20)->nullable();
+            $table->string('particella_attuale', 20)->nullable();
+            $table->string('sub_attuale', 20)->nullable();
+            $table->string('foglio_precedente', 20)->nullable();
+            $table->string('particella_precedente', 20)->nullable();
+            $table->string('sub_precedente', 20)->nullable();
+            $table->string('codice_famiglia', 30)->nullable()->index();
+            $table->string('intestatario_famiglia')->nullable();
+            $table->unsignedInteger('n_componenti')->nullable();
+            $table->string('codice_fiscale_intestatario', 20)->nullable();
             $table->timestamps();
-        });
-    }
 
-    private static function anagrafeGruppiFamiglia(): void
-    {
-        if (Schema::connection(self::CONNECTION)->hasTable('bt_anagrafe_gruppi_famiglia')) {
-            return;
-        }
-
-        Schema::connection(self::CONNECTION)->create('bt_anagrafe_gruppi_famiglia', function (Blueprint $table) {
-            $table->id();
-            $table->uuid('import_batch_id')->index();
-            $table->unsignedBigInteger('numero_famiglia')->unique();
-            $table->unsignedInteger('n_componenti')->default(0);
-            $table->timestamps();
+            $table->index(['import_batch_id', 'codice_famiglia']);
         });
     }
 

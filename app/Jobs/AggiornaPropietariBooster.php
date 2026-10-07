@@ -2,22 +2,23 @@
 
 namespace App\Jobs;
 
+use App\Http\Controllers\BoosterController;
+use App\Http\Controllers\CatastoImmobileController;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Http\Controllers\BoosterController;
-use App\Http\Controllers\CatastoImmobileController;
-use Illuminate\Support\Facades\Cache;
 
 class AggiornaPropietariBooster implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 7200; 
+    public $timeout = 7200;
+
     public $tries = 1;
 
     public function __construct(
@@ -41,36 +42,36 @@ class AggiornaPropietariBooster implements ShouldQueue
         $booster = new BoosterController();
         $codeComune = strtoupper($this->code_comune);
         $nomiDb = [
-            "9999" => 'morcone-webgis',
-            "B946" => 'casavatore-webgis',
-            "D230" => 'cusanomutri-webgis',
-            "D469" => 'faicchio-webgis',
-            "D784" => 'frasso_telesino-webgis',
-            "I062" => 'sannicolamanfredi-webgis',
-            "F717" => 'morcone-webgis',
-            "G848" => 'pontelandolfo-webgis',
-            "L185" => 'toccocaudio-webgis',
-            "H967" => 'sanlorenzomaggiore-webgis',
-            "G311" => 'pannarano-webgis',
-            "C659" => 'chiusanosandomenico-webgis',
-            "G991" => 'prata_sannita-webgis',
-            "H313" => 'ripalimosani-webgis',
-            "L254" => 'torrecuso-webgis',
-            "F111" => 'melito-webgis',
-            "D361" => 'dragoni-webgis',
-            "C245" => 'castelpagano-webgis',
-            "H894" => 'sangiorgiodelsannio-webgis',
-            "H898" => 'sangiorgiolamolara-webgis',
-            "F448" => 'montecalvoirpino-webgis',
-            "L739" => 'venticano-webgis',
-            "I197" => 'santagatadegoti-webgis',
-            "D756" => 'fragnetomonforte-webgis',
-            "F113" => 'melizzano-webgis',
-            "C250" => 'castelpoto-webgis',
-            "G386" => 'paupisi-webgis',
-            "H087" => 'puglianello-webgis',
+            '9999' => 'morcone-webgis',
+            'B946' => 'casavatore-webgis',
+            'D230' => 'cusanomutri-webgis',
+            'D469' => 'faicchio-webgis',
+            'D784' => 'frasso_telesino-webgis',
+            'I062' => 'sannicolamanfredi-webgis',
+            'F717' => 'morcone-webgis',
+            'G848' => 'pontelandolfo-webgis',
+            'L185' => 'toccocaudio-webgis',
+            'H967' => 'sanlorenzomaggiore-webgis',
+            'G311' => 'pannarano-webgis',
+            'C659' => 'chiusanosandomenico-webgis',
+            'G991' => 'prata_sannita-webgis',
+            'H313' => 'ripalimosani-webgis',
+            'L254' => 'torrecuso-webgis',
+            'F111' => 'melito-webgis',
+            'D361' => 'dragoni-webgis',
+            'C245' => 'castelpagano-webgis',
+            'H894' => 'sangiorgiodelsannio-webgis',
+            'H898' => 'sangiorgiolamolara-webgis',
+            'F448' => 'montecalvoirpino-webgis',
+            'L739' => 'venticano-webgis',
+            'I197' => 'santagatadegoti-webgis',
+            'D756' => 'fragnetomonforte-webgis',
+            'F113' => 'melizzano-webgis',
+            'C250' => 'castelpoto-webgis',
+            'G386' => 'paupisi-webgis',
+            'H087' => 'puglianello-webgis',
         ];
-        if (!array_key_exists($codeComune, $nomiDb)) {
+        if (! array_key_exists($codeComune, $nomiDb)) {
             throw new \Exception("Codice comune non trovato: {$this->code_comune}");
         }
         $dbName = $nomiDb[$codeComune];
@@ -106,7 +107,9 @@ class AggiornaPropietariBooster implements ShouldQueue
                 ->limit(50)
                 ->get();
 
-            if ($records->isEmpty()) break;
+            if ($records->isEmpty()) {
+                break;
+            }
 
             $catastoController = new CatastoImmobileController();
 
@@ -121,12 +124,12 @@ class AggiornaPropietariBooster implements ShouldQueue
 
                     // 2. Determina catasto_tipo dalla qualità del terreno
                     $catasto_tipo = 'Terreno';
-                    if (!empty($terreni)) {
+                    if (! empty($terreni)) {
                         $catqua = strtolower(trim($terreni[0]->catqua ?? ''));
                         if ($catqua !== '') {
                             $catasto_tipo = ucwords($catqua);
                         }
-                    } elseif (!empty($fabbricati)) {
+                    } elseif (! empty($fabbricati)) {
                         $catasto_tipo = 'Fabbricato';
                     }
 
@@ -136,9 +139,9 @@ class AggiornaPropietariBooster implements ShouldQueue
                         $record->FOGLIO,
                         $record->PARTICELLA
                     );
-                    $proprietarioStr = !empty($owners)
+                    $proprietarioStr = ! empty($owners)
                         ? implode(' | ', array_map(
-                            fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
+                            fn ($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']} - {$o['descrizione']}",
                             $owners
                         ))
                         : '';
@@ -149,13 +152,15 @@ class AggiornaPropietariBooster implements ShouldQueue
                     $processedSubs = [];
 
                     $allSubRecords = array_merge(
-                        array_map(fn($t) => (object)['sub' => $t->sub, 'tipo' => 'Terreno', 'catqua' => $t->catqua ?? ''], $terreni),
-                        array_map(fn($f) => (object)['sub' => $f->sub, 'tipo' => 'Fabbricato', 'catqua' => $f->catqua ?? ''], $fabbricati)
+                        array_map(fn ($t) => (object) ['sub' => $t->sub, 'tipo' => 'Terreno', 'catqua' => $t->catqua ?? ''], $terreni),
+                        array_map(fn ($f) => (object) ['sub' => $f->sub, 'tipo' => 'Fabbricato', 'catqua' => $f->catqua ?? ''], $fabbricati)
                     );
 
                     foreach ($allSubRecords as $item) {
                         $sub = $item->sub ?? '';
-                        if (empty($sub) || isset($processedSubs[$sub])) continue;
+                        if (empty($sub) || isset($processedSubs[$sub])) {
+                            continue;
+                        }
                         $processedSubs[$sub] = true;
 
                         $subOwners = $booster->getProprietariAttuali(
@@ -166,12 +171,12 @@ class AggiornaPropietariBooster implements ShouldQueue
                         );
 
                         $subData[] = [
-                            'sub'          => $sub,
-                            'tipo'         => $item->tipo,
-                            'catqua'       => $item->catqua,
-                            'proprietario' => !empty($subOwners)
+                            'sub' => $sub,
+                            'tipo' => $item->tipo,
+                            'catqua' => $item->catqua,
+                            'proprietario' => ! empty($subOwners)
                                 ? implode(' | ', array_map(
-                                    fn($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']}",
+                                    fn ($o) => "{$o['nome']} ({$o['cf']}) - Titolo: {$o['titolo']}",
                                     $subOwners
                                 ))
                                 : '',
@@ -184,28 +189,28 @@ class AggiornaPropietariBooster implements ShouldQueue
                         ->where('PARTICELLA', $record->PARTICELLA)
                         ->update([
                             'proprietario' => $proprietarioStr,
-                            'catasto_tipo'  => $catasto_tipo,
-                            'sub_data'      => !empty($subData) ? json_encode($subData, JSON_UNESCAPED_UNICODE) : null,
+                            'catasto_tipo' => $catasto_tipo,
+                            'sub_data' => ! empty($subData) ? json_encode($subData, JSON_UNESCAPED_UNICODE) : null,
                         ]);
 
                     $processed++;
                 } catch (\Throwable $e) {
-                    Log::error("JOB ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e->getMessage());
+                    Log::error("JOB ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: ".$e->getMessage());
                     try {
                         DB::table($this->finalTable)
                             ->where('FOGLIO', $record->FOGLIO)
                             ->where('PARTICELLA', $record->PARTICELLA)
                             ->update(['proprietario' => 'ERRORE', 'catasto_tipo' => 'ERRORE']);
                     } catch (\Throwable $e2) {
-                        Log::error("JOB: impossibile marcare ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: " . $e2->getMessage());
+                        Log::error("JOB: impossibile marcare ERRORE {$record->FOGLIO}/{$record->PARTICELLA}: ".$e2->getMessage());
                     }
                 }
             }
 
             Cache::put($cacheKey, [
-                'status'     => 'running',
-                'processed'  => $processed,
-                'total'      => $total,
+                'status' => 'running',
+                'processed' => $processed,
+                'total' => $total,
                 'started_at' => now()->toDateTimeString(),
             ], 14400);
 
@@ -215,9 +220,9 @@ class AggiornaPropietariBooster implements ShouldQueue
         } while (true);
 
         Cache::put($cacheKey, [
-            'status'       => 'completed',
-            'processed'    => $processed,
-            'total'        => $total,
+            'status' => 'completed',
+            'processed' => $processed,
+            'total' => $total,
             'completed_at' => now()->toDateTimeString(),
         ], 14400);
 
@@ -235,11 +240,12 @@ class AggiornaPropietariBooster implements ShouldQueue
         try {
             config(['database.connections.pgsql.database' => 'info-generali']);
             DB::reconnect('pgsql');
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
 
         Cache::put("job_status_{$this->finalTable}", [
             'status' => 'error',
-            'error'  => $exception->getMessage(),
+            'error' => $exception->getMessage(),
         ], 14400);
     }
 }

@@ -176,22 +176,10 @@
                         <span class="badge-stato text-muted" data-stato="riduzioni">non importato</span>
                     </div>
                     <div class="file-row">
-                        <div class="titolo">File 6 &middot; Componenti familiari (Anagrafe)</div>
-                        @include('booster-tributi.partials.file-input-it', ['nome' => 'anagrafe-famiglie'])
-                        <button class="btn btn-sm btn-primary" data-azione="importa" data-import="anagrafe-famiglie">Importa</button>
-                        <span class="badge-stato text-muted" data-stato="anagrafe-famiglie">non importato</span>
-                    </div>
-                    <div class="file-row">
-                        <div class="titolo">File 7 &middot; Cittadini residenti (Anagrafe)</div>
-                        @include('booster-tributi.partials.file-input-it', ['nome' => 'anagrafe-residenti'])
-                        <button class="btn btn-sm btn-primary" data-azione="importa" data-import="anagrafe-residenti">Importa</button>
-                        <span class="badge-stato text-muted" data-stato="anagrafe-residenti">non importato</span>
-                    </div>
-                    <div class="file-row">
-                        <div class="titolo">File 8 &middot; Raggruppamento famiglie</div>
-                        @include('booster-tributi.partials.file-input-it', ['nome' => 'gruppi-famiglia'])
-                        <button class="btn btn-sm btn-primary" data-azione="importa" data-import="gruppi-famiglia">Importa</button>
-                        <span class="badge-stato text-muted" data-stato="gruppi-famiglia">non importato</span>
+                        <div class="titolo">File 6 &middot; Dati anagrafici residenza</div>
+                        @include('booster-tributi.partials.file-input-it', ['nome' => 'anagrafe-residenza'])
+                        <button class="btn btn-sm btn-primary" data-azione="importa" data-import="anagrafe-residenza">Importa</button>
+                        <span class="badge-stato text-muted" data-stato="anagrafe-residenza">non importato</span>
                     </div>
                 </div>
             </div>
@@ -300,9 +288,7 @@
                         dettaglio: 'file2_dettaglio_sottocategoria',
                         tariffario: 'file3_tariffario',
                         riduzioni: 'file4_riduzioni',
-                        'anagrafe-famiglie': 'file6_anagrafe_famiglie',
-                        'anagrafe-residenti': 'file7_anagrafe_residenti',
-                        'gruppi-famiglia': 'file8_gruppi_famiglia',
+                        'anagrafe-residenza': 'file6_anagrafe_residenza',
                     };
                     Object.entries(mappaTipi).forEach(([chiave, tipoFile]) => {
                         const el = document.querySelector(`[data-stato="${chiave}"]`);
@@ -343,7 +329,7 @@
                         btn.textContent = 'Importa';
                         if (!res.success) { alert('Errore: ' + res.error); return; }
                         aggiornaStato();
-                        if (['immobili', 'dettaglio', 'anagrafe-famiglie', 'anagrafe-residenti', 'gruppi-famiglia'].includes(tipo)) {
+                        if (['immobili', 'dettaglio', 'anagrafe-residenza'].includes(tipo)) {
                             caricaFotografia();
                         }
                     })
@@ -470,16 +456,19 @@
                     const diffField = tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
                     const thead = document.querySelector('#tabellaRisultati thead');
                     const tbody = document.querySelector('#tabellaRisultati tbody');
-                    thead.innerHTML = `<tr><th>Codice utenza</th><th>Denominazione</th><th>Indirizzo immobile</th><th>Inizio validità</th><th>${diffLabel}</th><th>Totale recuperabile</th><th>Con sanzioni e interessi</th></tr>`;
-                    tbody.innerHTML = res.righe.map((r, idx) => `<tr data-idx="${idx}" title="Clicca per il dettaglio Oggi/Domani">
-                        <td>${r.codice_utenza}</td>
+                    thead.innerHTML = `<tr><th>Codice utenza</th><th>Denominazione</th><th>Indirizzo immobile</th><th>Inizio recupero</th><th>${diffLabel}</th><th>Totale recuperabile</th><th>Con sanzioni e interessi</th></tr>`;
+                    tbody.innerHTML = res.righe.map((r, idx) => {
+                        const alertResidenza = tipo === 'componenti' && r.match_residenza_ubicazione === false;
+                        return `<tr data-idx="${idx}" class="${alertResidenza ? 'fw-bold table-warning' : ''}" title="${alertResidenza ? 'Ubicazione immobile diversa dalla residenza: possibile seconda casa. ' : ''}Clicca per il dettaglio Oggi/Domani">
+                        <td>${alertResidenza ? '<i class="bi bi-exclamation-triangle-fill text-warning"></i> ' : ''}${r.codice_utenza}</td>
                         <td>${r.denominazione ?? ''}</td>
                         <td>${r.indirizzo_immobile ?? ''}</td>
-                        <td>${fmtData(r.data_inizio_validita_recupero ?? r.data_inizio_validita)}</td>
+                        <td>${fmtData(r.data_inizio_recupero ?? r.data_inizio_validita_recupero ?? r.data_inizio_validita)}</td>
                         <td>${r[diffField]}</td>
                         <td>${fmtEuro(r.totale_recuperabile)}</td>
                         <td>${fmtEuro(r.totale_con_sanzioni_interessi)}</td>
-                    </tr>`).join('');
+                    </tr>`;
+                    }).join('');
                     tbody.querySelectorAll('tr').forEach(tr => {
                         tr.addEventListener('click', () => mostraDettaglioPosizione(ultimiRisultati[tr.dataset.idx], ultimoTipoRisultato));
                     });
@@ -515,7 +504,8 @@
                 domani = {
                     'Componenti reali (Anagrafe)': componentiReali,
                     'Componenti tassati TARI (sottocategoria File 2)': dichiaratiTari,
-                    'Indirizzo/residenza coerenti': riga.match_residenza_ubicazione === true ? 'Sì' : (riga.match_residenza_ubicazione === false ? 'No' : 'N/D'),
+                    'Indirizzo/residenza coerenti': riga.match_residenza_ubicazione === true ? 'Sì' : (riga.match_residenza_ubicazione === false ? '<span class="text-danger">No &ndash; possibile seconda casa</span>' : 'N/D'),
+                    'Ultima variazione nucleo (Anagrafe)': fmtData(riga.data_variazione_nucleo) || 'n.d.',
                 };
             }
 
@@ -562,7 +552,7 @@
                         <tbody>${righeAnni}</tbody>
                     </table>
                 </div>
-                <p class="text-muted small mb-1">Inizio validità scheda TARI: ${fmtData(riga.data_inizio_validita_recupero ?? riga.data_inizio_validita) || 'n.d.'}</p>
+                <p class="text-muted small mb-1">Inizio validità scheda TARI: ${fmtData(riga.data_inizio_validita_recupero ?? riga.data_inizio_validita) || 'n.d.'}${riga.data_inizio_recupero ? ` &middot; recupero calcolato dal ${fmtData(riga.data_inizio_recupero)}` : ''}</p>
                 <p class="text-end mb-1">Totale recuperabile: <strong>${fmtEuro(riga.totale_recuperabile)}</strong></p>
                 <p class="text-end fw-bold fs-5 mb-0">Totale con sanzioni e interessi: ${fmtEuro(riga.totale_con_sanzioni_interessi)}</p>
             `;

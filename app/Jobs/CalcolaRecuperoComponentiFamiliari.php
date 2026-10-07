@@ -35,9 +35,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
         private string $jobKey,
         private string $batchImmobili,
         private string $batchDettaglio,
-        private string $batchAnagrafeResidenti,
-        private ?string $batchAnagrafeFamiglie,
-        private ?string $batchGruppiFamiglia
+        private string $batchAnagrafeResidenza
     ) {}
 
     public function handle(): void
@@ -59,7 +57,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                 ->get()
                 ->keyBy('codice_utenza');
 
-            $componenti = ComponentiFamiliari::daBatch($this->batchAnagrafeResidenti, $this->batchAnagrafeFamiglie, $this->batchGruppiFamiglia);
+            $componenti = ComponentiFamiliari::daBatch($this->batchAnagrafeResidenza);
 
             $calcolatore = RecuperoCalculator::conConnessioniDefault();
             $risultati = [];
@@ -78,7 +76,10 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                 }
 
                 $dettaglio = $dettagli->get($immobile->codice_utenza);
-                $componentiDichiarati = ComponentiFamiliari::dichiarati($dettaglio, $immobile);
+                $componentiDichiarati = ComponentiFamiliari::dichiarati($dettaglio);
+                if ($componentiDichiarati === null) {
+                    continue;
+                }
 
                 $componentiDiff = $reali['n'] - $componentiDichiarati;
                 if ($componentiDiff <= 0) {
@@ -87,10 +88,18 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
 
                 $matchResidenza = AddressNormalizer::corrispondono($immobile->indirizzo_immobile, $reali['indirizzo']);
 
+                // Il recupero parte dalla più recente tra inizio validità della
+                // scheda TARI e ultima variazione del nucleo anagrafico.
+                $dataInizioValidita = $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita;
+                $dataInizioRecupero = collect([$dataInizioValidita, $reali['data_variazione_nucleo']])
+                    ->filter()
+                    ->map(fn ($d) => substr((string) $d, 0, 10))
+                    ->max();
+
                 $esito = $calcolatore->calcolaComponenti(
                     $dettaglio->codice_tariffa ?? null,
                     $reali['n'],
-                    $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
+                    $dataInizioRecupero,
                     $dettaglio ? [$dettaglio->riduzione_1, $dettaglio->riduzione_2, $dettaglio->riduzione_3] : []
                 );
 
@@ -100,7 +109,9 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                     'componenti_dichiarati' => $componentiDichiarati,
                     'componenti_diff' => $componentiDiff,
                     'match_residenza_ubicazione' => $matchResidenza,
-                    'data_inizio_validita' => $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
+                    'data_inizio_validita' => $dataInizioValidita,
+                    'data_variazione_nucleo' => $reali['data_variazione_nucleo'],
+                    'data_inizio_recupero' => $dataInizioRecupero,
                     'dettaglio_anni' => json_encode($esito['dettaglio_anni']),
                     'totale_recuperabile' => $esito['totale_recuperabile'],
                     'totale_con_sanzioni_interessi' => $esito['totale_con_sanzioni_interessi'],

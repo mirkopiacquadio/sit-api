@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * 2026-10-05, punto 7): immobili dove mq TARI > 80% mq catasto o componenti
  * dichiarati > componenti anagrafici. Solo conteggio, niente €: servono a mostrare
  * quanto la banca dati TARI è soggetta a rettifiche/ricorsi. Il conteggio
- * componenti richiede File 7 + File 6/8 (e File 2 per i dichiarati): se mancano
+ * componenti richiede il File 6 "Dati anagrafici residenza" (e File 2 per i dichiarati): se mancano
  * viene semplicemente saltato.
  */
 class AnomalyDetector
@@ -48,12 +48,8 @@ class AnomalyDetector
                 ->keyBy('codice_utenza')
             : collect();
 
-        $batchResidenti = $this->ultimoBatch('file7_anagrafe_residenti');
-        $batchFamiglie = $this->ultimoBatch('file6_anagrafe_famiglie');
-        $batchGruppi = $this->ultimoBatch('file8_gruppi_famiglia');
-        $componenti = $batchResidenti && ($batchFamiglie || $batchGruppi)
-            ? ComponentiFamiliari::daBatch($batchResidenti, $batchFamiglie, $batchGruppi)
-            : null;
+        $batchResidenza = $this->ultimoBatch('file6_anagrafe_residenza');
+        $componenti = $batchResidenza ? ComponentiFamiliari::daBatch($batchResidenza) : null;
 
         $daInserire = [];
         $now = now();
@@ -99,8 +95,9 @@ class AnomalyDetector
             $componentiEccesso = null;
             if ($componenti !== null && ComponentiFamiliari::immobileAnalizzabile($riga)) {
                 $reali = $componenti->reali($riga->codice_fiscale_piva);
-                if ($reali !== null) {
-                    $diff = $reali['n'] - ComponentiFamiliari::dichiarati($dettagli->get($riga->codice_utenza), $riga);
+                $dichiarati = ComponentiFamiliari::dichiarati($dettagli->get($riga->codice_utenza));
+                if ($reali !== null && $dichiarati !== null) {
+                    $diff = $reali['n'] - $dichiarati;
                     if ($diff < 0) {
                         $componentiEccesso = -$diff;
                         $tipi[] = 'componenti_tari_in_eccesso';
