@@ -222,6 +222,7 @@
                 </div>
                 <div class="card-body">
                     <div class="mb-2">Totale generale recuperabile: <span id="totaleGenerale">&euro; 0,00</span></div>
+                    <div class="mb-2">Totale con sanzioni e interessi: <span id="totaleGeneraleSanzioni" class="fw-bold fs-5">&euro; 0,00</span></div>
                     <div class="table-responsive">
                         <table class="table table-sm table-hover" id="tabellaRisultati">
                             <thead></thead>
@@ -273,8 +274,21 @@
             document.getElementById('pannelloComune').style.display = comuneCorrente ? 'block' : 'none';
             document.getElementById('cardAnomalie').style.display = 'none';
             document.getElementById('cardRisultati').style.display = 'none';
-            if (comuneCorrente) aggiornaStato();
+            if (comuneCorrente) {
+                aggiornaStato();
+                caricaFotografia();
+            }
         });
+
+        // La fotografia resta sempre visibile (non solo subito dopo l'import del
+        // File 1) e viene ricalcolata con gli ultimi file importati.
+        function caricaFotografia() {
+            apiFetch(`${baseUrl}/${comuneCorrente}/anomalie-riepilogo`)
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success && res.anomalie) mostraAnomalie(res.anomalie, res.anomalie.batch_id);
+                });
+        }
 
         function aggiornaStato() {
             apiFetch(`${baseUrl}/${comuneCorrente}/stato`)
@@ -329,8 +343,8 @@
                         btn.textContent = 'Importa';
                         if (!res.success) { alert('Errore: ' + res.error); return; }
                         aggiornaStato();
-                        if (tipo === 'immobili' && res.anomalie) {
-                            mostraAnomalie(res.anomalie, res.import.batch_id);
+                        if (['immobili', 'dettaglio', 'anagrafe-famiglie', 'anagrafe-residenti', 'gruppi-famiglia'].includes(tipo)) {
+                            caricaFotografia();
                         }
                     })
                     .catch(err => {
@@ -352,6 +366,8 @@
                 componenti_zero_sospetti: 'Componenti residenti a 0 (sospetto)',
                 senza_mq_tari: 'Senza mq TARI',
                 deceduto: 'Intestatario deceduto',
+                mq_tari_in_eccesso: 'Mq TARI in eccesso (a favore del comune)',
+                componenti_tari_in_eccesso: 'Componenti TARI in eccesso (a favore del comune)',
             };
             body.innerHTML = `<p>Righe totali: <strong>${anomalie.totale_righe}</strong> &middot; con almeno un'anomalia: <strong>${anomalie.righe_con_anomalie}</strong></p>` +
                 Object.entries(anomalie.per_tipo).map(([tipo, n]) =>
@@ -433,6 +449,10 @@
             return '€ ' + Number(n ?? 0).toLocaleString('it-IT', { minimumFractionDigits: 2 });
         }
 
+        function fmtData(d) {
+            return d ? new Date(d).toLocaleDateString('it-IT') : '';
+        }
+
         function caricaRisultati(tipo, endpoint) {
             apiFetch(`${baseUrl}/${comuneCorrente}/risultati/${endpoint}`)
                 .then(r => r.json())
@@ -441,6 +461,7 @@
                     document.getElementById('cardRisultati').style.display = 'block';
                     document.getElementById('linkExport').href = `${baseUrl}/${comuneCorrente}/risultati/${endpoint}/export`;
                     document.getElementById('totaleGenerale').textContent = fmtEuro(res.totale_generale);
+                    document.getElementById('totaleGeneraleSanzioni').textContent = fmtEuro(res.totale_generale_con_sanzioni_interessi);
 
                     ultimiRisultati = res.righe;
                     ultimoTipoRisultato = tipo;
@@ -449,13 +470,15 @@
                     const diffField = tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
                     const thead = document.querySelector('#tabellaRisultati thead');
                     const tbody = document.querySelector('#tabellaRisultati tbody');
-                    thead.innerHTML = `<tr><th>Codice utenza</th><th>Denominazione</th><th>Indirizzo immobile</th><th>${diffLabel}</th><th>Totale recuperabile</th></tr>`;
+                    thead.innerHTML = `<tr><th>Codice utenza</th><th>Denominazione</th><th>Indirizzo immobile</th><th>Inizio validità</th><th>${diffLabel}</th><th>Totale recuperabile</th><th>Con sanzioni e interessi</th></tr>`;
                     tbody.innerHTML = res.righe.map((r, idx) => `<tr data-idx="${idx}" title="Clicca per il dettaglio Oggi/Domani">
                         <td>${r.codice_utenza}</td>
                         <td>${r.denominazione ?? ''}</td>
                         <td>${r.indirizzo_immobile ?? ''}</td>
+                        <td>${fmtData(r.data_inizio_validita_recupero ?? r.data_inizio_validita)}</td>
                         <td>${r[diffField]}</td>
                         <td>${fmtEuro(r.totale_recuperabile)}</td>
+                        <td>${fmtEuro(r.totale_con_sanzioni_interessi)}</td>
                     </tr>`).join('');
                     tbody.querySelectorAll('tr').forEach(tr => {
                         tr.addEventListener('click', () => mostraDettaglioPosizione(ultimiRisultati[tr.dataset.idx], ultimoTipoRisultato));
@@ -485,12 +508,13 @@
                     'Mq dichiarati TARI (oggi)': mqOggi.toLocaleString('it-IT'),
                 };
             } else {
-                const componentiReali = componentiDichiarati + Number(riga.componenti_diff ?? 0);
+                const dichiaratiTari = Number(riga.componenti_dichiarati ?? componentiDichiarati);
+                const componentiReali = dichiaratiTari + Number(riga.componenti_diff ?? 0);
                 diffLabel = 'Differenza componenti non dichiarati';
                 diffValore = Number(riga.componenti_diff ?? 0);
                 domani = {
                     'Componenti reali (Anagrafe)': componentiReali,
-                    'Componenti dichiarati TARI (oggi)': componentiDichiarati,
+                    'Componenti tassati TARI (sottocategoria File 2)': dichiaratiTari,
                     'Indirizzo/residenza coerenti': riga.match_residenza_ubicazione === true ? 'Sì' : (riga.match_residenza_ubicazione === false ? 'No' : 'N/D'),
                 };
             }
@@ -501,10 +525,11 @@
             const righeAnni = Object.keys(dettaglioAnni).sort().map(anno => {
                 const d = dettaglioAnni[anno];
                 if (d.errore) {
-                    return `<tr><td>${anno}</td><td colspan="4" class="text-muted">${d.errore}</td></tr>`;
+                    return `<tr><td>${anno}</td><td colspan="5" class="text-muted">${d.errore}</td></tr>`;
                 }
                 return `<tr>
                     <td>${anno}</td>
+                    <td>${d.giorni ?? 365}</td>
                     <td>${fmtEuro(d.dovuto)}</td>
                     <td>${fmtEuro(d.sanzione)}</td>
                     <td>${fmtEuro(d.interessi)}</td>
@@ -533,11 +558,13 @@
                 <h6 class="mt-3">Recupero per anno (dovuto, sanzioni, interessi)</h6>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered">
-                        <thead><tr><th>Anno</th><th>Dovuto</th><th>Sanzione</th><th>Interessi</th><th>Totale</th></tr></thead>
+                        <thead><tr><th>Anno</th><th>Giorni</th><th>Dovuto</th><th>Sanzione 30%</th><th>Interessi legali</th><th>Con sanzioni e interessi</th></tr></thead>
                         <tbody>${righeAnni}</tbody>
                     </table>
                 </div>
-                <p class="text-end fw-bold fs-5 mb-0">Totale recuperabile: ${fmtEuro(riga.totale_recuperabile)}</p>
+                <p class="text-muted small mb-1">Inizio validità scheda TARI: ${fmtData(riga.data_inizio_validita_recupero ?? riga.data_inizio_validita) || 'n.d.'}</p>
+                <p class="text-end mb-1">Totale recuperabile: <strong>${fmtEuro(riga.totale_recuperabile)}</strong></p>
+                <p class="text-end fw-bold fs-5 mb-0">Totale con sanzioni e interessi: ${fmtEuro(riga.totale_con_sanzioni_interessi)}</p>
             `;
 
             new bootstrap.Modal(document.getElementById('modalDettaglio')).show();

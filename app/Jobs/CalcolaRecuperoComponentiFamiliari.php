@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\BoosterTributi\AddressNormalizer;
+use App\Services\BoosterTributi\ComponentiFamiliari;
 use App\Services\BoosterTributi\ComuneSchema;
 use App\Services\BoosterTributi\RecuperoCalculator;
 use App\Support\BoosterTributi\ComuneConnection;
@@ -17,9 +18,8 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * "DIFFERENZE COMPONENTI FAMILIARI" (ISTRUZIONI Monter): confronta i componenti
- * dichiarati in TARI con quelli reali del nucleo anagrafico (via CF -> famiglia
- * -> n. componenti), solo per persone fisiche e categorie abitative/pertinenze
- * (esclude B, D, F, C/01). Il match ubicazione immobile <-> residenza anagrafica
+ * dichiarati in TARI (sottocategoria File 2) con quelli reali del nucleo
+ * anagrafico, vedi ComponentiFamiliari. Il match ubicazione immobile <-> residenza anagrafica
  * serve a scremare le seconde case (non necessariamente omissione).
  */
 class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
@@ -29,10 +29,6 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
     public $timeout = 3600;
 
     public $tries = 1;
-
-    private const CATEGORIE_ESCLUSE_PREFISSO = ['B', 'D', 'F'];
-
-    private const CATEGORIE_ESCLUSE_ESATTE = ['C01', 'C/01'];
 
     public function __construct(
         private string $codiceComune,
@@ -55,35 +51,15 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
 
             $immobili = DB::connection('pgsql')->table('bt_tari_immobili')
                 ->where('import_batch_id', $this->batchImmobili)
-                ->where('tipo_persona', 'F')
                 ->get()
-                ->filter(fn ($riga) => ! $this->categoriaEsclusa($riga->categoria_catastale));
+                ->filter(fn ($riga) => ComponentiFamiliari::immobileAnalizzabile($riga));
 
             $dettagli = DB::connection('pgsql')->table('bt_tari_dettaglio_sottocategoria')
                 ->where('import_batch_id', $this->batchDettaglio)
                 ->get()
                 ->keyBy('codice_utenza');
 
-            $residenti = DB::connection('pgsql')->table('bt_anagrafe_residenti')
-                ->where('import_batch_id', $this->batchAnagrafeResidenti)
-                ->get()
-                ->keyBy(fn ($r) => $this->normalizzaCf($r->codice_fiscale));
-
-            $gruppiPerFamiglia = null;
-            if ($this->batchGruppiFamiglia) {
-                $gruppiPerFamiglia = DB::connection('pgsql')->table('bt_anagrafe_gruppi_famiglia')
-                    ->where('import_batch_id', $this->batchGruppiFamiglia)
-                    ->get()
-                    ->keyBy('numero_famiglia');
-            }
-
-            $famigliePerNumero = null;
-            if ($this->batchAnagrafeFamiglie) {
-                $famigliePerNumero = DB::connection('pgsql')->table('bt_anagrafe_famiglie')
-                    ->where('import_batch_id', $this->batchAnagrafeFamiglie)
-                    ->get()
-                    ->keyBy('numero_famiglia');
-            }
+            $componenti = ComponentiFamiliari::daBatch($this->batchAnagrafeResidenti, $this->batchAnagrafeFamiglie, $this->batchGruppiFamiglia);
 
             $calcolatore = RecuperoCalculator::conConnessioniDefault();
             $risultati = [];
@@ -96,43 +72,24 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                     Cache::put($cacheKey, ['status' => 'running', 'processate' => $processate, 'totale' => $totale], 14400);
                 }
 
-                $cf = $this->normalizzaCf($immobile->codice_fiscale_piva);
-                if ($cf === null) {
+                $reali = $componenti->reali($immobile->codice_fiscale_piva);
+                if ($reali === null) {
                     continue;
                 }
 
-                $residente = $residenti->get($cf);
-                if ($residente === null) {
-                    continue;
-                }
+                $dettaglio = $dettagli->get($immobile->codice_utenza);
+                $componentiDichiarati = ComponentiFamiliari::dichiarati($dettaglio, $immobile);
 
-                $componentiReali = null;
-                $indirizzoResidenza = $residente->indirizzo_residenza;
-
-                if ($gruppiPerFamiglia && $gruppiPerFamiglia->has($residente->numero_famiglia)) {
-                    $componentiReali = (int) $gruppiPerFamiglia->get($residente->numero_famiglia)->n_componenti;
-                } elseif ($famigliePerNumero && $famigliePerNumero->has($residente->numero_famiglia)) {
-                    $famiglia = $famigliePerNumero->get($residente->numero_famiglia);
-                    $componentiReali = (int) $famiglia->n_componenti;
-                    $indirizzoResidenza = $indirizzoResidenza ?: $famiglia->indirizzo;
-                }
-
-                if ($componentiReali === null) {
-                    continue;
-                }
-
-                $componentiDiff = $componentiReali - (int) $immobile->componenti_residenti;
+                $componentiDiff = $reali['n'] - $componentiDichiarati;
                 if ($componentiDiff <= 0) {
                     continue;
                 }
 
-                $matchResidenza = AddressNormalizer::corrispondono($immobile->indirizzo_immobile, $indirizzoResidenza);
-
-                $dettaglio = $dettagli->get($immobile->codice_utenza);
+                $matchResidenza = AddressNormalizer::corrispondono($immobile->indirizzo_immobile, $reali['indirizzo']);
 
                 $esito = $calcolatore->calcolaComponenti(
                     $dettaglio->codice_tariffa ?? null,
-                    $componentiReali,
+                    $reali['n'],
                     $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
                     $dettaglio ? [$dettaglio->riduzione_1, $dettaglio->riduzione_2, $dettaglio->riduzione_3] : []
                 );
@@ -140,10 +97,13 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                 $risultati[] = [
                     'import_batch_id' => $this->batchImmobili,
                     'codice_utenza' => $immobile->codice_utenza,
+                    'componenti_dichiarati' => $componentiDichiarati,
                     'componenti_diff' => $componentiDiff,
                     'match_residenza_ubicazione' => $matchResidenza,
+                    'data_inizio_validita' => $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
                     'dettaglio_anni' => json_encode($esito['dettaglio_anni']),
                     'totale_recuperabile' => $esito['totale_recuperabile'],
+                    'totale_con_sanzioni_interessi' => $esito['totale_con_sanzioni_interessi'],
                     'created_at' => now(),
                 ];
             }
@@ -167,38 +127,6 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
             Cache::put($cacheKey, ['status' => 'error', 'errore' => $e->getMessage()], 14400);
             throw $e;
         }
-    }
-
-    /**
-     * Confronto CF Immobili TARI (File 1) <-> Anagrafe residenti (File 7): gli
-     * export Halley possono avere spazi iniziali/finali (campi a larghezza fissa),
-     * quindi serve trim oltre a maiuscole/minuscole, altrimenti CF identici non
-     * matchano e il ricalcolo scarta la riga.
-     */
-    private function normalizzaCf(?string $cf): ?string
-    {
-        if ($cf === null) {
-            return null;
-        }
-
-        $cf = mb_strtoupper(trim($cf));
-
-        return $cf !== '' ? $cf : null;
-    }
-
-    private function categoriaEsclusa(?string $categoria): bool
-    {
-        if ($categoria === null) {
-            return false;
-        }
-
-        $categoria = mb_strtoupper(trim($categoria));
-
-        if (in_array(str_replace('/', '', $categoria), self::CATEGORIE_ESCLUSE_ESATTE, true)) {
-            return true;
-        }
-
-        return in_array(mb_substr($categoria, 0, 1), self::CATEGORIE_ESCLUSE_PREFISSO, true);
     }
 
     public function failed(\Throwable $e): void

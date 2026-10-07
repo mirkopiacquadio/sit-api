@@ -13,11 +13,23 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class BoosterTributiController extends Controller
 {
+    private const ETICHETTE_ANOMALIE = [
+        'senza_intestatario' => 'Senza intestatario',
+        'senza_catasto' => 'Senza riferimenti catastali',
+        'senza_indirizzo' => 'Senza indirizzo residenza/recapito',
+        'componenti_zero_sospetti' => 'Componenti residenti a 0 (sospetto)',
+        'senza_mq_tari' => 'Senza mq TARI',
+        'deceduto' => 'Intestatario deceduto',
+        'mq_tari_in_eccesso' => 'Mq TARI in eccesso rispetto al catasto (a favore del comune)',
+        'componenti_tari_in_eccesso' => 'Componenti TARI in eccesso rispetto all\'anagrafe (a favore del comune)',
+    ];
+
     public function index()
     {
         return view('booster-tributi.index', [
@@ -269,6 +281,24 @@ class BoosterTributiController extends Controller
         return response()->json(['success' => true, 'batch' => $dettaglio]);
     }
 
+    /**
+     * Fotografia anomalie sempre visibile (non solo subito dopo l'import del File
+     * 1): ricalcolata sull'ultimo File 1 con gli ultimi File 2/6/7/8 disponibili,
+     * così i conteggi "TARI in eccesso" si aggiornano anche quando l'anagrafe
+     * viene importata dopo il File 1.
+     */
+    public function riepilogoAnomalie(string $comune)
+    {
+        $this->setComune($comune);
+
+        $batchImmobili = $this->ultimoBatch('file1_immobili');
+        if (! $batchImmobili) {
+            return response()->json(['success' => true, 'anomalie' => null]);
+        }
+
+        return response()->json(['success' => true, 'anomalie' => (new AnomalyDetector())->rileva($batchImmobili)]);
+    }
+
     public function anomalie(string $comune, string $batchId)
     {
         $this->setComune($comune);
@@ -305,6 +335,7 @@ class BoosterTributiController extends Controller
             ->select(
                 'bt_anomalie_snapshot.codice_utenza',
                 'bt_anomalie_snapshot.tipi_anomalia',
+                'bt_anomalie_snapshot.dettaglio',
                 'bt_tari_immobili.denominazione',
                 'bt_tari_immobili.codice_fiscale_piva',
                 'bt_tari_immobili.indirizzo_immobile',
@@ -323,11 +354,13 @@ class BoosterTributiController extends Controller
         $sheet->fromArray([
             'Codice utenza', 'Anomalie', 'Denominazione', 'Codice fiscale/P.IVA', 'Indirizzo immobile',
             'Foglio', 'Numero', 'Mq TARI', 'Mq catasto', 'Componenti residenti', 'Componenti non residenti', 'Data decesso',
+            'Mq TARI in eccesso (oltre 80% catasto)', 'Componenti TARI in eccesso (oltre anagrafe)',
         ], null, 'A1');
 
         $rigaExcel = 2;
         foreach ($righe as $riga) {
             $tipi = json_decode($riga->tipi_anomalia, true) ?? [];
+            $dettaglio = json_decode($riga->dettaglio ?? '', true) ?? [];
             $sheet->fromArray([
                 $riga->codice_utenza,
                 implode(', ', $tipi),
@@ -341,8 +374,25 @@ class BoosterTributiController extends Controller
                 $riga->componenti_residenti,
                 $riga->componenti_non_residenti,
                 $riga->data_decesso,
+                $dettaglio['mq_in_eccesso'] ?? null,
+                $dettaglio['componenti_in_eccesso'] ?? null,
             ], null, "A{$rigaExcel}");
             $rigaExcel++;
+        }
+
+        $conteggi = [];
+        foreach ($righe as $riga) {
+            foreach (json_decode($riga->tipi_anomalia, true) ?? [] as $tipo) {
+                $conteggi[$tipo] = ($conteggi[$tipo] ?? 0) + 1;
+            }
+        }
+        $riepilogo = $spreadsheet->createSheet();
+        $riepilogo->setTitle('Riepilogo');
+        $riepilogo->fromArray(['Anomalia', 'Numero immobili'], null, 'A1');
+        $rigaRiepilogo = 2;
+        foreach (self::ETICHETTE_ANOMALIE as $tipo => $etichetta) {
+            $riepilogo->fromArray([$etichetta, $conteggi[$tipo] ?? 0], null, "A{$rigaRiepilogo}");
+            $rigaRiepilogo++;
         }
 
         $fileName = "booster_tributi_anomalie_{$comune}_".now()->format('Ymd_His').'.xlsx';
@@ -435,7 +485,14 @@ class BoosterTributiController extends Controller
                 $join->on('bt_tari_immobili.codice_utenza', '=', 'bt_recupero_mq.codice_utenza')
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchImmobili);
             })
-            ->select('bt_tari_immobili.*', 'bt_recupero_mq.mq_diff', 'bt_recupero_mq.dettaglio_anni', 'bt_recupero_mq.totale_recuperabile')
+            ->select(
+                'bt_tari_immobili.*',
+                'bt_recupero_mq.mq_diff',
+                'bt_recupero_mq.data_inizio_validita as data_inizio_validita_recupero',
+                'bt_recupero_mq.dettaglio_anni',
+                'bt_recupero_mq.totale_recuperabile',
+                'bt_recupero_mq.totale_con_sanzioni_interessi'
+            )
             ->orderByDesc('bt_recupero_mq.totale_recuperabile')
             ->get();
 
@@ -443,6 +500,7 @@ class BoosterTributiController extends Controller
             'success' => true,
             'righe' => $righe,
             'totale_generale' => round($righe->sum('totale_recuperabile'), 2),
+            'totale_generale_con_sanzioni_interessi' => round($righe->sum('totale_con_sanzioni_interessi'), 2),
         ]);
     }
 
@@ -459,10 +517,13 @@ class BoosterTributiController extends Controller
             })
             ->select(
                 'bt_tari_immobili.*',
+                'bt_recupero_componenti.componenti_dichiarati',
                 'bt_recupero_componenti.componenti_diff',
                 'bt_recupero_componenti.match_residenza_ubicazione',
+                'bt_recupero_componenti.data_inizio_validita as data_inizio_validita_recupero',
                 'bt_recupero_componenti.dettaglio_anni',
-                'bt_recupero_componenti.totale_recuperabile'
+                'bt_recupero_componenti.totale_recuperabile',
+                'bt_recupero_componenti.totale_con_sanzioni_interessi'
             )
             ->orderByDesc('bt_recupero_componenti.totale_recuperabile')
             ->get();
@@ -471,6 +532,7 @@ class BoosterTributiController extends Controller
             'success' => true,
             'righe' => $righe,
             'totale_generale' => round($righe->sum('totale_recuperabile'), 2),
+            'totale_generale_con_sanzioni_interessi' => round($righe->sum('totale_con_sanzioni_interessi'), 2),
         ]);
     }
 
@@ -484,12 +546,20 @@ class BoosterTributiController extends Controller
         return $this->exportRisultati($comune, 'componenti');
     }
 
+    /**
+     * Per ogni anno recuperabile due colonne affiancate: dovuto (in pro-rata
+     * dalla data di inizio validità) e dovuto + sanzione 30% + interessi legali
+     * cumulati; in coda il totale di ciascuna delle due serie (annotazioni
+     * cliente 2026-10-05, punti 2 e 6).
+     */
     private function exportRisultati(string $comune, string $tipo)
     {
         $this->setComune($comune);
         $batchImmobili = $this->ultimoBatch('file1_immobili');
         $tabella = $tipo === 'mq' ? 'bt_recupero_mq' : 'bt_recupero_componenti';
-        $colonnaDiff = $tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
+        $colonneDiff = $tipo === 'mq'
+            ? ["{$tabella}.mq_diff"]
+            : ["{$tabella}.componenti_dichiarati", "{$tabella}.componenti_diff"];
 
         $righe = DB::table($tabella)
             ->where("{$tabella}.import_batch_id", $batchImmobili)
@@ -497,7 +567,12 @@ class BoosterTributiController extends Controller
                 $join->on('bt_tari_immobili.codice_utenza', '=', "{$tabella}.codice_utenza")
                     ->where('bt_tari_immobili.import_batch_id', '=', $batchImmobili);
             })
-            ->select('bt_tari_immobili.*', "{$tabella}.{$colonnaDiff}", "{$tabella}.dettaglio_anni", "{$tabella}.totale_recuperabile")
+            ->select(array_merge(['bt_tari_immobili.*'], $colonneDiff, [
+                "{$tabella}.data_inizio_validita as data_inizio_validita_recupero",
+                "{$tabella}.dettaglio_anni",
+                "{$tabella}.totale_recuperabile",
+                "{$tabella}.totale_con_sanzioni_interessi",
+            ]))
             ->orderByDesc("{$tabella}.totale_recuperabile")
             ->get();
 
@@ -515,13 +590,20 @@ class BoosterTributiController extends Controller
 
         $intestazione = [
             'Codice utenza', 'Denominazione', 'Codice fiscale/P.IVA', 'Indirizzo immobile',
-            'Foglio', 'Numero', 'Subalterno', 'Categoria catastale',
-            $tipo === 'mq' ? 'Differenza mq' : 'Differenza componenti',
+            'Foglio', 'Numero', 'Subalterno', 'Categoria catastale', 'Data inizio validità',
         ];
+        if ($tipo === 'mq') {
+            $intestazione[] = 'Differenza mq';
+        } else {
+            $intestazione[] = 'Componenti dichiarati TARI';
+            $intestazione[] = 'Differenza componenti';
+        }
         foreach ($anni as $anno) {
             $intestazione[] = "Recuperabile {$anno}";
+            $intestazione[] = "{$anno} con sanzioni e interessi";
         }
         $intestazione[] = 'Totale recuperabile';
+        $intestazione[] = 'Totale con sanzioni e interessi';
         $sheet->fromArray($intestazione, null, 'A1');
 
         $rigaExcel = 2;
@@ -536,23 +618,37 @@ class BoosterTributiController extends Controller
                 $riga->numero,
                 $riga->subalterno,
                 $riga->categoria_catastale,
-                $riga->{$colonnaDiff},
+                $riga->data_inizio_validita_recupero ?? $riga->data_inizio_validita,
             ];
+            if ($tipo === 'mq') {
+                $colonne[] = $riga->mq_diff;
+            } else {
+                $colonne[] = $riga->componenti_dichiarati;
+                $colonne[] = $riga->componenti_diff;
+            }
             foreach ($anni as $anno) {
-                $colonne[] = $dettaglio[$anno]['totale'] ?? ($dettaglio[$anno]['errore'] ?? null);
+                if (isset($dettaglio[$anno]['errore'])) {
+                    $colonne[] = $dettaglio[$anno]['errore'];
+                    $colonne[] = $dettaglio[$anno]['errore'];
+
+                    continue;
+                }
+                $colonne[] = $dettaglio[$anno]['dovuto'] ?? null;
+                $colonne[] = $dettaglio[$anno]['totale'] ?? null;
             }
             $colonne[] = $riga->totale_recuperabile;
+            $colonne[] = $riga->totale_con_sanzioni_interessi;
 
             $sheet->fromArray($colonne, null, "A{$rigaExcel}");
             $rigaExcel++;
         }
 
-        $colonnaTotale = chr(ord('A') + count($intestazione) - 1);
         $sheet->setCellValue("A{$rigaExcel}", 'TOTALE');
-        $sheet->setCellValue(
-            "{$colonnaTotale}{$rigaExcel}",
-            "=SUM({$colonnaTotale}2:{$colonnaTotale}".($rigaExcel - 1).')'
-        );
+        $primaColonnaImporti = count($intestazione) - 2 * count($anni) - 1;
+        for ($indice = $primaColonnaImporti; $indice <= count($intestazione); $indice++) {
+            $lettera = Coordinate::stringFromColumnIndex($indice);
+            $sheet->setCellValue("{$lettera}{$rigaExcel}", "=SUM({$lettera}2:{$lettera}".($rigaExcel - 1).')');
+        }
 
         $fileName = "booster_tributi_recupero_{$tipo}_{$comune}_".now()->format('Ymd_His').'.xlsx';
         $tempPath = storage_path('app/booster_tributi_tmp/'.$fileName);

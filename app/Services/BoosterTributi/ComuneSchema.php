@@ -27,6 +27,37 @@ class ComuneSchema
         self::anomalieSnapshot();
         self::recuperoMq();
         self::recuperoComponenti();
+        self::colonneRecupero();
+    }
+
+    /**
+     * Colonne aggiunte dopo il primo rilascio (annotazioni cliente 2026-10-05):
+     * le tabelle bt_recupero_* esistono già sui DB dei comuni, quindi vanno
+     * aggiunte con ALTER e non solo nel create().
+     */
+    private static function colonneRecupero(): void
+    {
+        $schema = Schema::connection(self::CONNECTION);
+
+        foreach (['bt_recupero_mq', 'bt_recupero_componenti'] as $tabella) {
+            if (! $schema->hasColumn($tabella, 'totale_con_sanzioni_interessi')) {
+                $schema->table($tabella, function (Blueprint $table) {
+                    $table->decimal('totale_con_sanzioni_interessi', 12, 2)->nullable();
+                });
+            }
+
+            if (! $schema->hasColumn($tabella, 'data_inizio_validita')) {
+                $schema->table($tabella, function (Blueprint $table) {
+                    $table->date('data_inizio_validita')->nullable();
+                });
+            }
+        }
+
+        if (! $schema->hasColumn('bt_recupero_componenti', 'componenti_dichiarati')) {
+            $schema->table('bt_recupero_componenti', function (Blueprint $table) {
+                $table->unsignedInteger('componenti_dichiarati')->nullable();
+            });
+        }
     }
 
     private static function importBatch(): void

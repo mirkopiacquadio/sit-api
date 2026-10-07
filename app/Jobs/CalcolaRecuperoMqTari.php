@@ -24,6 +24,7 @@ class CalcolaRecuperoMqTari implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 3600;
+
     public $tries = 1;
 
     public function __construct(
@@ -31,8 +32,7 @@ class CalcolaRecuperoMqTari implements ShouldQueue
         private string $jobKey,
         private string $batchImmobili,
         private string $batchDettaglio
-    ) {
-    }
+    ) {}
 
     public function handle(): void
     {
@@ -89,8 +89,10 @@ class CalcolaRecuperoMqTari implements ShouldQueue
                     'import_batch_id' => $this->batchImmobili,
                     'codice_utenza' => $immobile->codice_utenza,
                     'mq_diff' => $mqDiff,
+                    'data_inizio_validita' => $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita,
                     'dettaglio_anni' => json_encode($esito['dettaglio_anni']),
                     'totale_recuperabile' => $esito['totale_recuperabile'],
+                    'totale_con_sanzioni_interessi' => $esito['totale_con_sanzioni_interessi'],
                     'created_at' => now(),
                 ];
             }

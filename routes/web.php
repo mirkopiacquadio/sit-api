@@ -89,6 +89,7 @@ Route::prefix('api/monter/booster-tributi')->name('booster-tributi.')->group(fun
     Route::post('/{comune}/import/anagrafe-residenti', [BoosterTributiController::class, 'importaAnagrafeResidenti'])->name('import.anagrafe-residenti');
     Route::post('/{comune}/import/gruppi-famiglia', [BoosterTributiController::class, 'importaGruppiFamiglia'])->name('import.gruppi-famiglia');
 
+    Route::get('/{comune}/anomalie-riepilogo', [BoosterTributiController::class, 'riepilogoAnomalie'])->name('anomalie.riepilogo');
     Route::get('/{comune}/anomalie/{batchId}', [BoosterTributiController::class, 'anomalie'])->name('anomalie');
     Route::get('/{comune}/anomalie/{batchId}/export', [BoosterTributiController::class, 'exportAnomalie'])->name('anomalie.export');
 

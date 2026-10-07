@@ -12,11 +12,10 @@ use Illuminate\Support\Facades\DB;
  * "DIFFERENZE COMPONENTI FAMILIARI").
  *
  * Logica per anno recuperabile (da anno(data_inizio_validita) a anno corrente,
- * max 5 anni):
- *   dovuto_anno = differenza * tariffa(anno, quota) * (1 - riduzione%)
- *   anno corrente        -> totale_anno = dovuto_anno (solo ruolo, niente sanzioni/interessi)
- *   anni precedenti       -> + sanzione 30% + interessi legali (accumulati anno per
- *                            anno dal momento in cui quell'annualità è dovuta ad oggi)
+ * max 5 anni), vedi calcolaPerAnno():
+ *   dovuto_anno = differenza * tariffa(anno, quota) * (1 - riduzione%), in pro-rata
+ *                 giornaliero nell'anno di inizio validità
+ *   totale_anno = dovuto_anno + sanzione 30% + interessi legali cumulati
  *
  * Le tre dipendenze sono iniettate come closure (non DB::query dirette) così che
  * la logica di calcolo sia testabile con fixture in memoria (vedi
@@ -28,6 +27,8 @@ class RecuperoCalculator
     private const SANZIONE_PERCENTUALE = 0.30;
 
     private const MAX_ANNI_ACCERTAMENTO = 5;
+
+    private const GIORNI_ANNO = 365;
 
     private array $cacheTariffario = [];
 
@@ -95,7 +96,7 @@ class RecuperoCalculator
 
     /**
      * @param  array<int,string|null>  $riduzioniApplicate  descrizioni riduzione (File 2, colonne riduzione_1/2/3)
-     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, anni_mancanti: array<int>}
+     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, totale_con_sanzioni_interessi: float, anni_mancanti: array<int>}
      */
     public function calcola(
         float $differenza,
@@ -104,59 +105,16 @@ class RecuperoCalculator
         string $tipoQuota,
         array $riduzioniApplicate = []
     ): array {
-        $annoCorrente = $this->annoCorrente ?? (int) now()->format('Y');
-        $annoInizio = $dataInizioValidita ? (int) date('Y', strtotime($dataInizioValidita)) : $annoCorrente;
-        $primoAnno = max($annoInizio, $annoCorrente - self::MAX_ANNI_ACCERTAMENTO);
-
-        $dettaglioAnni = [];
-        $anniMancanti = [];
-        $totale = 0.0;
-
-        for ($anno = $primoAnno; $anno <= $annoCorrente; $anno++) {
+        return $this->calcolaPerAnno($dataInizioValidita, function (int $anno) use ($differenza, $codiceTariffa, $tipoQuota, $riduzioniApplicate): ?array {
             $tariffa = $codiceTariffa ? $this->tariffaAnno($anno, $codiceTariffa, $tipoQuota) : null;
-
             if ($tariffa === null) {
-                $anniMancanti[] = $anno;
-                $dettaglioAnni[$anno] = ['errore' => 'tariffario mancante'];
-
-                continue;
+                return null;
             }
 
             $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniApplicate, $tipoQuota);
-            $dovutoAnno = round($differenza * $tariffa * (1 - $riduzionePerc), 2);
 
-            if ($anno === $annoCorrente) {
-                $totaleAnno = $dovutoAnno;
-                $dettaglioAnni[$anno] = [
-                    'dovuto' => $dovutoAnno,
-                    'sanzione' => 0.0,
-                    'interessi' => 0.0,
-                    'riduzione_applicata' => $riduzionePerc,
-                    'totale' => $totaleAnno,
-                    'tipo' => 'ruolo',
-                ];
-            } else {
-                $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
-                $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente), 2);
-                $totaleAnno = round($dovutoAnno + $sanzione + $interessi, 2);
-                $dettaglioAnni[$anno] = [
-                    'dovuto' => $dovutoAnno,
-                    'sanzione' => $sanzione,
-                    'interessi' => $interessi,
-                    'riduzione_applicata' => $riduzionePerc,
-                    'totale' => $totaleAnno,
-                    'tipo' => 'accertamento',
-                ];
-            }
-
-            $totale += $totaleAnno;
-        }
-
-        return [
-            'dettaglio_anni' => $dettaglioAnni,
-            'totale_recuperabile' => round($totale, 2),
-            'anni_mancanti' => $anniMancanti,
-        ];
+            return [$differenza * $tariffa * (1 - $riduzionePerc), $riduzionePerc];
+        });
     }
 
     /**
@@ -172,7 +130,7 @@ class RecuperoCalculator
      * restano valide. Vedi ISTRUZIONI Monter e annotazioni cliente 2026-09-27.
      *
      * @param  array<int,string|null>  $riduzioniApplicate  descrizioni riduzione dichiarate (File 2)
-     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, anni_mancanti: array<int>}
+     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, totale_con_sanzioni_interessi: float, anni_mancanti: array<int>}
      */
     public function calcolaComponenti(
         ?string $codiceTariffaDichiarato,
@@ -180,61 +138,96 @@ class RecuperoCalculator
         ?string $dataInizioValidita,
         array $riduzioniApplicate = []
     ): array {
-        $annoCorrente = $this->annoCorrente ?? (int) now()->format('Y');
-        $annoInizio = $dataInizioValidita ? (int) date('Y', strtotime($dataInizioValidita)) : $annoCorrente;
-        $primoAnno = max($annoInizio, $annoCorrente - self::MAX_ANNI_ACCERTAMENTO);
-
         $categoria = $codiceTariffaDichiarato !== null ? explode('.', $codiceTariffaDichiarato, 2)[0] : null;
         $riduzioniRicalcolo = $this->escludiUnicoOccupante($riduzioniApplicate, $componentiReali);
+
+        return $this->calcolaPerAnno($dataInizioValidita, function (int $anno) use ($codiceTariffaDichiarato, $categoria, $componentiReali, $riduzioniRicalcolo): ?array {
+            $tariffaDichiarata = $codiceTariffaDichiarato ? $this->tariffaAnno($anno, $codiceTariffaDichiarato, 'variabile') : null;
+            $tariffaReale = $categoria !== null ? $this->tariffaScaglioneComponenti($anno, $categoria, $componentiReali) : null;
+            if ($tariffaDichiarata === null || $tariffaReale === null) {
+                return null;
+            }
+
+            $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniRicalcolo, 'variabile');
+
+            return [($tariffaReale - $tariffaDichiarata) * (1 - $riduzionePerc), $riduzionePerc];
+        });
+    }
+
+    /**
+     * Ciclo comune ai due calcoli (annotazioni cliente 2026-10-05, punti 1/2/6).
+     *
+     * Per ogni anno recuperabile (da anno(data_inizio_validita) all'anno corrente,
+     * max 5 anni indietro):
+     *   dovuto  = dovuto annuo pieno * giorni coperti / 365 (pro-rata solo
+     *             nell'anno di inizio validità: dal 01/12 -> 31/365)
+     *   sanzione  = 30% del dovuto
+     *   interessi = dovuto * somma tassi legali dall'anno dovuto all'anno corrente
+     *               INCLUSO (es. 2022 -> 2022+2023+2024+2025+2026 = 12,35%), con il
+     *               tasso dell'anno di inizio validità anch'esso in pro-rata
+     *   totale    = dovuto + sanzione + interessi
+     * Sanzioni e interessi si applicano anche all'anno corrente: il cliente vuole
+     * per ogni annualità la colonna "con sanzioni e interessi" accanto al dovuto.
+     *
+     * @param  \Closure(int):?array{0: float, 1: float}  $dovutoAnnuo  anno -> [dovuto annuo pieno, riduzione applicata] o null se manca il tariffario
+     */
+    private function calcolaPerAnno(?string $dataInizioValidita, \Closure $dovutoAnnuo): array
+    {
+        $annoCorrente = $this->annoCorrente ?? (int) now()->format('Y');
+        $inizio = $dataInizioValidita ? strtotime($dataInizioValidita) : false;
+        $annoInizio = $inizio !== false ? (int) date('Y', $inizio) : $annoCorrente;
+        $primoAnno = max($annoInizio, $annoCorrente - self::MAX_ANNI_ACCERTAMENTO);
+
+        // Frazione d'anno coperta nell'anno di inizio validità: giorni dal giorno di
+        // inizio al 31/12 inclusi, diviso 365 (come richiesto dal cliente, max 1
+        // negli anni bisestili). Se l'inizio è prima della finestra, anno pieno.
+        $quotaPrimoAnno = 1.0;
+        $giorniPrimoAnno = 365;
+        if ($inizio !== false && $annoInizio === $primoAnno) {
+            $giorniPrimoAnno = (int) date('z', mktime(0, 0, 0, 12, 31, $annoInizio)) - (int) date('z', $inizio) + 1;
+            $quotaPrimoAnno = min($giorniPrimoAnno / self::GIORNI_ANNO, 1.0);
+        }
 
         $dettaglioAnni = [];
         $anniMancanti = [];
         $totale = 0.0;
+        $totaleConSanzioni = 0.0;
 
         for ($anno = $primoAnno; $anno <= $annoCorrente; $anno++) {
-            $tariffaDichiarata = $codiceTariffaDichiarato ? $this->tariffaAnno($anno, $codiceTariffaDichiarato, 'variabile') : null;
-            $tariffaReale = $categoria !== null ? $this->tariffaScaglioneComponenti($anno, $categoria, $componentiReali) : null;
+            $annuo = $dovutoAnnuo($anno);
 
-            if ($tariffaDichiarata === null || $tariffaReale === null) {
+            if ($annuo === null) {
                 $anniMancanti[] = $anno;
                 $dettaglioAnni[$anno] = ['errore' => 'tariffario mancante'];
 
                 continue;
             }
 
-            $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniRicalcolo, 'variabile');
-            $dovutoAnno = round(($tariffaReale - $tariffaDichiarata) * (1 - $riduzionePerc), 2);
+            [$dovutoPieno, $riduzionePerc] = $annuo;
+            $quota = $anno === $primoAnno ? $quotaPrimoAnno : 1.0;
+            $dovutoAnno = round($dovutoPieno * $quota, 2);
 
-            if ($anno === $annoCorrente) {
-                $totaleAnno = $dovutoAnno;
-                $dettaglioAnni[$anno] = [
-                    'dovuto' => $dovutoAnno,
-                    'sanzione' => 0.0,
-                    'interessi' => 0.0,
-                    'riduzione_applicata' => $riduzionePerc,
-                    'totale' => $totaleAnno,
-                    'tipo' => 'ruolo',
-                ];
-            } else {
-                $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
-                $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente), 2);
-                $totaleAnno = round($dovutoAnno + $sanzione + $interessi, 2);
-                $dettaglioAnni[$anno] = [
-                    'dovuto' => $dovutoAnno,
-                    'sanzione' => $sanzione,
-                    'interessi' => $interessi,
-                    'riduzione_applicata' => $riduzionePerc,
-                    'totale' => $totaleAnno,
-                    'tipo' => 'accertamento',
-                ];
-            }
+            $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
+            $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente, $quota), 2);
+            $totaleAnno = round($dovutoAnno + $sanzione + $interessi, 2);
 
-            $totale += $totaleAnno;
+            $dettaglioAnni[$anno] = [
+                'giorni' => $anno === $primoAnno ? min($giorniPrimoAnno, self::GIORNI_ANNO) : self::GIORNI_ANNO,
+                'dovuto' => $dovutoAnno,
+                'sanzione' => $sanzione,
+                'interessi' => $interessi,
+                'riduzione_applicata' => $riduzionePerc,
+                'totale' => $totaleAnno,
+            ];
+
+            $totale += $dovutoAnno;
+            $totaleConSanzioni += $totaleAnno;
         }
 
         return [
             'dettaglio_anni' => $dettaglioAnni,
             'totale_recuperabile' => round($totale, 2),
+            'totale_con_sanzioni_interessi' => round($totaleConSanzioni, 2),
             'anni_mancanti' => $anniMancanti,
         ];
     }
@@ -304,16 +297,21 @@ class RecuperoCalculator
         return min($totalePerc, 1.0);
     }
 
-    private function interessiCumulati(int $annoDovuto, int $annoCorrente): float
+    /**
+     * Somma dei tassi legali dall'anno dovuto all'anno corrente incluso; il tasso
+     * dell'anno dovuto è moltiplicato per $quotaPrimoAnno (pro-rata giornaliero
+     * quando l'annualità è quella di inizio validità).
+     */
+    private function interessiCumulati(int $annoDovuto, int $annoCorrente, float $quotaPrimoAnno = 1.0): float
     {
         $totale = 0.0;
 
-        for ($anno = $annoDovuto; $anno < $annoCorrente; $anno++) {
+        for ($anno = $annoDovuto; $anno <= $annoCorrente; $anno++) {
             if (! array_key_exists($anno, $this->cacheInteressi)) {
                 $this->cacheInteressi[$anno] = ($this->interesseLookup)($anno);
             }
 
-            $totale += $this->cacheInteressi[$anno];
+            $totale += $this->cacheInteressi[$anno] * ($anno === $annoDovuto ? $quotaPrimoAnno : 1.0);
         }
 
         return $totale;
