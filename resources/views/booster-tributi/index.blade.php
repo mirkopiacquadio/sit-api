@@ -198,6 +198,7 @@
                     <div class="d-flex gap-2 mb-3">
                         <button class="btn btn-outline-success" id="btnCalcolaMq">Calcola differenze mq TARI</button>
                         <button class="btn btn-outline-success" id="btnCalcolaComponenti">Calcola differenze componenti familiari</button>
+                        <button class="btn btn-outline-success" id="btnCalcolaFamiglie">Calcola famiglie non presenti in TARI</button>
                     </div>
                     <div id="progressoCalcolo" class="text-muted small"></div>
                 </div>
@@ -427,6 +428,7 @@
 
         document.getElementById('btnCalcolaMq').addEventListener('click', () => avviaCalcolo('mq', 'mq'));
         document.getElementById('btnCalcolaComponenti').addEventListener('click', () => avviaCalcolo('componenti', 'componenti'));
+        document.getElementById('btnCalcolaFamiglie').addEventListener('click', () => avviaCalcolo('famiglie', 'famiglie'));
 
         let ultimiRisultati = [];
         let ultimoTipoRisultato = null;
@@ -452,6 +454,11 @@
                     ultimiRisultati = res.righe;
                     ultimoTipoRisultato = tipo;
 
+                    if (tipo === 'famiglie') {
+                        mostraTabellaFamiglie(res.righe);
+                        return;
+                    }
+
                     const diffLabel = tipo === 'mq' ? 'Diff. mq' : 'Diff. componenti';
                     const diffField = tipo === 'mq' ? 'mq_diff' : 'componenti_diff';
                     const thead = document.querySelector('#tabellaRisultati thead');
@@ -473,6 +480,58 @@
                         tr.addEventListener('click', () => mostraDettaglioPosizione(ultimiRisultati[tr.dataset.idx], ultimoTipoRisultato));
                     });
                 });
+        }
+
+        // Famiglie non presenti in TARI: una riga per nucleo anagrafico; evidenziate
+        // quelle censite in TARI con i riferimenti catastali precedenti.
+        function mostraTabellaFamiglie(righe) {
+            const thead = document.querySelector('#tabellaRisultati thead');
+            const tbody = document.querySelector('#tabellaRisultati tbody');
+            thead.innerHTML = '<tr><th>Intestatario</th><th>Codice fiscale</th><th>Comp.</th><th>Indirizzo</th><th>Fg/Map/Sub</th><th>Mq</th><th>Totale recuperabile</th><th>Con sanzioni e interessi</th></tr>';
+            tbody.innerHTML = righe.map((r, idx) => {
+                const evidenza = r.censito_con_precedenti === true;
+                return `<tr data-idx="${idx}" class="${evidenza ? 'fw-bold table-warning' : ''}" title="${evidenza ? 'Censito in TARI con i riferimenti catastali precedenti: censito ma non paga. ' : ''}${r.nota ?? ''}">
+                    <td>${evidenza ? '<i class="bi bi-exclamation-triangle-fill text-warning"></i> ' : ''}${r.intestatario ?? ''}</td>
+                    <td>${r.codice_fiscale_intestatario ?? ''}</td>
+                    <td>${r.n_componenti}</td>
+                    <td>${r.indirizzo ?? ''}</td>
+                    <td>${[r.foglio, r.particella, r.sub].filter(v => v).join('/')}</td>
+                    <td>${r.mq_catasto ?? (r.nota ? '<span class="text-muted small">n.d.</span>' : '')}</td>
+                    <td>${fmtEuro(r.totale_recuperabile)}</td>
+                    <td>${fmtEuro(r.totale_con_sanzioni_interessi)}</td>
+                </tr>`;
+            }).join('');
+            tbody.querySelectorAll('tr').forEach(tr => {
+                tr.addEventListener('click', () => mostraDettaglioFamiglia(ultimiRisultati[tr.dataset.idx]));
+            });
+        }
+
+        function mostraDettaglioFamiglia(riga) {
+            const dettaglioAnni = typeof riga.dettaglio_anni === 'string' ? JSON.parse(riga.dettaglio_anni) : (riga.dettaglio_anni ?? {});
+            const righeAnni = Object.keys(dettaglioAnni).sort().map(anno => {
+                const d = dettaglioAnni[anno];
+                if (d.errore) return `<tr><td>${anno}</td><td colspan="6" class="text-muted">${d.errore}</td></tr>`;
+                return `<tr><td>${anno}</td><td>${d.giorni ?? 365}</td><td>${d.componenti_reali ?? ''}</td><td>${fmtEuro(d.dovuto)}</td><td>${fmtEuro(d.sanzione)}</td><td>${fmtEuro(d.interessi)}</td><td class="fw-bold">${fmtEuro(d.totale)}</td></tr>`;
+            }).join('');
+
+            document.getElementById('dettaglioBody').innerHTML = `
+                <p class="mb-1"><strong>${riga.intestatario ?? ''}</strong> &middot; ${riga.codice_fiscale_intestatario ?? ''}</p>
+                <p class="text-muted small mb-2">Codice famiglia ${riga.codice_famiglia} &middot; ${riga.indirizzo ?? ''} &middot; ${riga.n_componenti} componenti &middot; residenza dal ${fmtData(riga.data_inizio) || 'n.d.'}</p>
+                <p class="small mb-2">Foglio ${riga.foglio ?? '-'} &middot; mappale ${riga.particella ?? '-'} &middot; sub ${riga.sub ?? '-'} &middot; cat. ${riga.categoria_catastale ?? '-'} &middot; mq catasto ${riga.mq_catasto ?? 'n.d.'} (calcolo su ${riga.mq_calcolo ?? 'n.d.'})</p>
+                ${riga.censito_con_precedenti ? '<div class="alert alert-warning py-2">Censito in TARI con i riferimenti catastali precedenti: risulta censito ma non paga.</div>' : ''}
+                ${riga.nota ? `<div class="alert alert-secondary py-2">${riga.nota}</div>` : ''}
+                <h6 class="mt-3">Recupero per anno (tariffa domestica intera &mdash; l'anno in corso è solo ruolo)</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead><tr><th>Anno</th><th>Giorni</th><th>Componenti</th><th>Dovuto</th><th>Sanzione 30%</th><th>Interessi legali</th><th>Con sanzioni e interessi</th></tr></thead>
+                        <tbody>${righeAnni}</tbody>
+                    </table>
+                </div>
+                <p class="text-end mb-1">Totale recuperabile: <strong>${fmtEuro(riga.totale_recuperabile)}</strong></p>
+                <p class="text-end fw-bold fs-5 mb-0">Totale con sanzioni e interessi: ${fmtEuro(riga.totale_con_sanzioni_interessi)}</p>
+            `;
+
+            new bootstrap.Modal(document.getElementById('modalDettaglio')).show();
         }
 
         function mostraDettaglioPosizione(riga, tipo) {

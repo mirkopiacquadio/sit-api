@@ -197,6 +197,62 @@ class RecuperoCalculator
     }
 
     /**
+     * "FAMIGLIE NON PRESENTI IN TARI": il nucleo non paga nulla, quindi si
+     * recupera l'intera tariffa domestica dello scaglione dei componenti reali:
+     * quota fissa * mq (80% superficie catastale) + quota variabile, entrambe
+     * della sottocategoria "N componenti" (istruzioni cliente 2026-10-08). Come
+     * per le differenze componenti, il numero è verificato giorno per giorno
+     * dalle date di ingresso; ai nuclei di 1 componente si applica la riduzione
+     * "unico occupante".
+     *
+     * @param  array<int,string>  $dateIngresso  data di ingresso (Y-m-d) di ciascun componente
+     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, totale_con_sanzioni_interessi: float, anni_mancanti: array<int>}
+     */
+    public function calcolaUtenzaDomestica(
+        string $categoriaDomestica,
+        float $mq,
+        int $componentiReali,
+        array $dateIngresso,
+        ?string $dataInizio,
+        ?string $riduzioneUnicoOccupante = null
+    ): array {
+        $dateIngresso = array_values(array_filter(array_map(fn ($d) => $d ? substr((string) $d, 0, 10) : null, $dateIngresso)));
+        $presentiIl = function (string $giorno) use ($componentiReali, $dateIngresso): int {
+            return max($componentiReali - count(array_filter($dateIngresso, fn ($d) => $d > $giorno)), 1);
+        };
+
+        return $this->calcolaPerAnno($dataInizio, function (int $anno, string $dal, int $giorni, int $divisore) use ($categoriaDomestica, $mq, $dateIngresso, $presentiIl, $riduzioneUnicoOccupante): ?array {
+            $fineAnno = sprintf('%04d-12-31', $anno);
+            $tagli = array_filter($dateIngresso, fn ($d) => $d > $dal && $d <= $fineAnno);
+            $tagli = array_values(array_unique(array_merge([$dal], $tagli)));
+            sort($tagli);
+
+            $dovuto = 0.0;
+            $riduzionePerc = 0.0;
+            foreach ($tagli as $i => $inizioTratto) {
+                $fineTratto = $tagli[$i + 1] ?? date('Y-m-d', strtotime($fineAnno.' +1 day'));
+                $giorniTratto = (int) round((strtotime($fineTratto) - strtotime($inizioTratto)) / 86400);
+                $presenti = $presentiIl($inizioTratto);
+
+                $fissa = $this->tariffaScaglioneComponenti($anno, $categoriaDomestica, $presenti, 'fissa');
+                $variabile = $this->tariffaScaglioneComponenti($anno, $categoriaDomestica, $presenti, 'variabile');
+                if ($fissa === null || $variabile === null) {
+                    return null;
+                }
+
+                $riduzioni = ($presenti === 1 && $riduzioneUnicoOccupante !== null) ? [$riduzioneUnicoOccupante] : [];
+                $riduzioneFissa = $this->riduzionePercentuale($anno, $riduzioni, 'fissa');
+                $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioni, 'variabile');
+
+                $annuo = $fissa * $mq * (1 - $riduzioneFissa) + $variabile * (1 - $riduzionePerc);
+                $dovuto += $annuo * $giorniTratto / $divisore;
+            }
+
+            return [$dovuto, $riduzionePerc, ['componenti_reali' => $presentiIl($fineAnno)]];
+        });
+    }
+
+    /**
      * Ciclo comune ai due calcoli (annotazioni cliente 2026-10-05 e 2026-10-08).
      *
      * Anni recuperabili: gli ultimi 5 più quello in corso (nel 2026: 2021-2026;
@@ -284,10 +340,10 @@ class RecuperoCalculator
      * componenti reali superano lo scaglione massimo importato (es. "6 o più
      * componenti"), scende finché non trova uno scaglione presente in tariffario.
      */
-    private function tariffaScaglioneComponenti(int $anno, string $categoria, int $componentiReali): ?float
+    private function tariffaScaglioneComponenti(int $anno, string $categoria, int $componentiReali, string $tipoQuota = 'variabile'): ?float
     {
         for ($n = max($componentiReali, 1); $n >= 1; $n--) {
-            $tariffa = $this->tariffaAnno($anno, $categoria.'.'.$n, 'variabile');
+            $tariffa = $this->tariffaAnno($anno, $categoria.'.'.$n, $tipoQuota);
             if ($tariffa !== null) {
                 return $tariffa;
             }

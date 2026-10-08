@@ -290,4 +290,34 @@ class RecuperoCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(31.0, $esito['dettaglio_anni'][2025]['dovuto'], 0.001);
         $this->assertSame('2025-12-01', $esito['data_inizio_recupero']);
     }
+
+    /**
+     * Famiglie non presenti in TARI: tariffa domestica intera (fissa * mq +
+     * variabile) dello scaglione reale; riduzione unico occupante solo con 1
+     * componente; anno in corso solo ruolo.
+     */
+    public function test_utenza_domestica_intera_con_scaglione_e_unico_occupante(): void
+    {
+        $tariffe = [];
+        foreach ([2025, 2026] as $anno) {
+            $tariffe[$anno]['1.1'] = ['fissa' => 1.0, 'variabile' => 100.0];
+            $tariffe[$anno]['1.2'] = ['fissa' => 1.5, 'variabile' => 200.0];
+        }
+        $riduzioni = [
+            ['anno' => 2025, 'descrizione' => 'Unico occupante', 'percentuale' => 30.0, 'applicazione' => 'Tariffa fissa e variabile'],
+            ['anno' => 2026, 'descrizione' => 'Unico occupante', 'percentuale' => 30.0, 'applicazione' => 'Tariffa fissa e variabile'],
+        ];
+        $calc = $this->calcolatore($tariffe, $riduzioni, annoCorrente: 2026);
+
+        // 1 componente dal 2025, il secondo entra il 01/01/2026
+        $esito = $calc->calcolaUtenzaDomestica('1', 80.0, 2, ['2025-01-01', '2026-01-01'], '2025-01-01', 'Unico occupante');
+
+        // 2025: (1 * 80 + 100) * 0.7 = 126
+        $this->assertEqualsWithDelta(126.0, $esito['dettaglio_anni'][2025]['dovuto'], 0.001);
+        $this->assertSame(1, $esito['dettaglio_anni'][2025]['componenti_reali']);
+        // 2026: 1.5 * 80 + 200 = 320, solo ruolo
+        $this->assertEqualsWithDelta(320.0, $esito['dettaglio_anni'][2026]['dovuto'], 0.001);
+        $this->assertSame(0.0, $esito['dettaglio_anni'][2026]['sanzione']);
+        $this->assertEqualsWithDelta(446.0, $esito['totale_recuperabile'], 0.001);
+    }
 }

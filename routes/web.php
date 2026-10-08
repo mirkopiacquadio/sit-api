@@ -93,10 +93,13 @@ Route::prefix('api/monter/booster-tributi')->name('booster-tributi.')->group(fun
 
     Route::post('/{comune}/calcola/mq', [BoosterTributiController::class, 'calcolaMq'])->name('calcola.mq');
     Route::post('/{comune}/calcola/componenti', [BoosterTributiController::class, 'calcolaComponenti'])->name('calcola.componenti');
+    Route::post('/{comune}/calcola/famiglie', [BoosterTributiController::class, 'calcolaFamiglie'])->name('calcola.famiglie');
     Route::get('/calcola/stato/{jobKey}', [BoosterTributiController::class, 'statoCalcolo'])->name('calcola.stato');
 
     Route::get('/{comune}/risultati/mq', [BoosterTributiController::class, 'risultatiMq'])->name('risultati.mq');
     Route::get('/{comune}/risultati/componenti', [BoosterTributiController::class, 'risultatiComponenti'])->name('risultati.componenti');
     Route::get('/{comune}/risultati/mq/export', [BoosterTributiController::class, 'exportRisultatiMq'])->name('risultati.mq.export');
     Route::get('/{comune}/risultati/componenti/export', [BoosterTributiController::class, 'exportRisultatiComponenti'])->name('risultati.componenti.export');
+    Route::get('/{comune}/risultati/famiglie', [BoosterTributiController::class, 'risultatiFamiglie'])->name('risultati.famiglie');
+    Route::get('/{comune}/risultati/famiglie/export', [BoosterTributiController::class, 'exportRisultatiFamiglie'])->name('risultati.famiglie.export');
 });

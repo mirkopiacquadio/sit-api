@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\CalcolaFamiglieNonPresentiTari;
 use App\Jobs\CalcolaRecuperoComponentiFamiliari;
 use App\Jobs\CalcolaRecuperoMqTari;
 use App\Services\BoosterTributi\AnomalyDetector;
@@ -408,6 +409,135 @@ class BoosterTributiController extends Controller
         CalcolaRecuperoComponentiFamiliari::dispatch($comune, $jobKey, $batchImmobili, $batchDettaglio, $batchResidenza);
 
         return response()->json(['success' => true, 'job_key' => $jobKey]);
+    }
+
+    public function calcolaFamiglie(string $comune)
+    {
+        $this->setComune($comune);
+
+        $batchImmobili = $this->ultimoBatch('file1_immobili');
+        $batchResidenza = $this->ultimoBatch('file6_anagrafe_residenza');
+
+        if (! $batchImmobili || ! $batchResidenza) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Servono File 1 e File 6 (Dati anagrafici residenza) importati per questo comune (più File 3/4 per il calcolo in €).',
+            ], 422);
+        }
+
+        $jobKey = (string) Str::uuid();
+        CalcolaFamiglieNonPresentiTari::dispatch(strtoupper($comune), $jobKey, $batchImmobili, $batchResidenza);
+
+        return response()->json(['success' => true, 'job_key' => $jobKey]);
+    }
+
+    private function righeFamiglie(): \Illuminate\Support\Collection
+    {
+        return DB::table('bt_famiglie_non_tari')
+            ->where('import_batch_id', $this->ultimoBatch('file1_immobili'))
+            ->orderByDesc('totale_recuperabile')
+            ->orderBy('intestatario')
+            ->get();
+    }
+
+    public function risultatiFamiglie(string $comune)
+    {
+        $this->setComune($comune);
+        $righe = $this->righeFamiglie();
+
+        return response()->json([
+            'success' => true,
+            'righe' => $righe,
+            'totale_generale' => round($righe->sum('totale_recuperabile'), 2),
+            'totale_generale_con_sanzioni_interessi' => round($righe->sum('totale_con_sanzioni_interessi'), 2),
+        ]);
+    }
+
+    /**
+     * Colonne nell'ordine richiesto dal cliente (istruzioni 2026-10-08), poi
+     * coppie per anno (recupero / con sanzioni e interessi), totali, e in coda
+     * le colonne di servizio (evidenza censito con riferimenti precedenti, note).
+     */
+    public function exportRisultatiFamiglie(string $comune)
+    {
+        $this->setComune($comune);
+        $righe = $this->righeFamiglie();
+
+        $anni = [];
+        foreach ($righe as $riga) {
+            foreach (array_keys(json_decode($riga->dettaglio_anni, true) ?? []) as $anno) {
+                $anni[$anno] = true;
+            }
+        }
+        ksort($anni);
+        $anni = array_keys($anni);
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $intestazione = [
+            'Intestatario scheda', 'Codice fiscale intestatario', 'Numero componenti', 'Indirizzo attuale',
+            'Data inizio residenza', 'Foglio attuale', 'Mappale attuale', 'Subalterno attuale',
+            'Mq immobile (catasto)', 'Mq calcolo (80%)',
+        ];
+        $baseColonne = count($intestazione);
+        foreach ($anni as $anno) {
+            $intestazione[] = "Recuperabile {$anno}";
+            $intestazione[] = "{$anno} con sanzioni e interessi";
+        }
+        $intestazione[] = 'Totale recuperabile';
+        $intestazione[] = 'Totale con sanzioni e interessi';
+        $intestazione[] = 'ALERT censito in TARI con riferimenti catastali precedenti';
+        $intestazione[] = 'Categoria catastale';
+        $intestazione[] = 'Note';
+        $sheet->fromArray($intestazione, null, 'A1');
+
+        $ultimaColonna = Coordinate::stringFromColumnIndex(count($intestazione));
+        $rigaExcel = 2;
+        foreach ($righe as $riga) {
+            $dettaglio = json_decode($riga->dettaglio_anni, true) ?? [];
+            $colonne = [
+                $riga->intestatario,
+                $riga->codice_fiscale_intestatario,
+                $riga->n_componenti,
+                $riga->indirizzo,
+                $riga->data_inizio,
+                $riga->foglio,
+                $riga->particella,
+                $riga->sub,
+                $riga->mq_catasto,
+                $riga->mq_calcolo,
+            ];
+            foreach ($anni as $anno) {
+                $colonne[] = $dettaglio[$anno]['errore'] ?? ($dettaglio[$anno]['dovuto'] ?? null);
+                $colonne[] = $dettaglio[$anno]['errore'] ?? ($dettaglio[$anno]['totale'] ?? null);
+            }
+            $colonne[] = $riga->totale_recuperabile;
+            $colonne[] = $riga->totale_con_sanzioni_interessi;
+            $colonne[] = $riga->censito_con_precedenti ? 'SÌ - censito ma non paga' : '';
+            $colonne[] = $riga->categoria_catastale;
+            $colonne[] = $riga->nota;
+
+            $sheet->fromArray($colonne, null, "A{$rigaExcel}");
+            if ($riga->censito_con_precedenti) {
+                $stile = $sheet->getStyle("A{$rigaExcel}:{$ultimaColonna}{$rigaExcel}");
+                $stile->getFont()->setBold(true);
+                $stile->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF3CD');
+            }
+            $rigaExcel++;
+        }
+
+        $sheet->setCellValue("A{$rigaExcel}", 'TOTALE');
+        for ($indice = $baseColonne + 1; $indice <= $baseColonne + 2 * count($anni) + 2; $indice++) {
+            $lettera = Coordinate::stringFromColumnIndex($indice);
+            $sheet->setCellValue("{$lettera}{$rigaExcel}", "=SUM({$lettera}2:{$lettera}".($rigaExcel - 1).')');
+        }
+
+        $fileName = "booster_tributi_famiglie_non_tari_{$comune}_".now()->format('Ymd_His').'.xlsx';
+        $tempPath = storage_path('app/booster_tributi_tmp/'.$fileName);
+        (new Xlsx($spreadsheet))->save($tempPath);
+
+        return response()->download($tempPath, $fileName)->deleteFileAfterSend(true);
     }
 
     public function statoCalcolo(string $jobKey)

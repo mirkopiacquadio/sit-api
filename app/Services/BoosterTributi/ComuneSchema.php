@@ -26,6 +26,37 @@ class ComuneSchema
         self::recuperoMq();
         self::recuperoComponenti();
         self::colonneRecupero();
+        self::famiglieNonTari();
+    }
+
+    private static function famiglieNonTari(): void
+    {
+        if (Schema::connection(self::CONNECTION)->hasTable('bt_famiglie_non_tari')) {
+            return;
+        }
+
+        Schema::connection(self::CONNECTION)->create('bt_famiglie_non_tari', function (Blueprint $table) {
+            $table->id();
+            $table->uuid('import_batch_id')->index();
+            $table->string('codice_famiglia', 30);
+            $table->string('intestatario')->nullable();
+            $table->string('codice_fiscale_intestatario', 20)->nullable();
+            $table->unsignedInteger('n_componenti');
+            $table->string('indirizzo')->nullable();
+            $table->date('data_inizio')->nullable();
+            $table->string('foglio', 20)->nullable();
+            $table->string('particella', 20)->nullable();
+            $table->string('sub', 20)->nullable();
+            $table->string('categoria_catastale', 10)->nullable();
+            $table->decimal('mq_catasto', 10, 2)->nullable();
+            $table->decimal('mq_calcolo', 10, 2)->nullable();
+            $table->boolean('censito_con_precedenti')->default(false);
+            $table->string('nota')->nullable();
+            $table->json('dettaglio_anni');
+            $table->decimal('totale_recuperabile', 12, 2)->default(0);
+            $table->decimal('totale_con_sanzioni_interessi', 12, 2)->default(0);
+            $table->timestamp('created_at')->useCurrent();
+        });
     }
 
     /**
