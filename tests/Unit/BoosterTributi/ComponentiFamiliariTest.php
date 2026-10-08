@@ -67,7 +67,7 @@ class ComponentiFamiliariTest extends TestCase
         ]));
 
         $this->assertSame(
-            ['n' => 3, 'indirizzo' => 'VIA ROMA 1', 'data_variazione_nucleo' => '2023-03-10'],
+            ['n' => 3, 'indirizzo' => 'VIA ROMA 1', 'date_ingresso' => ['2015-03-10', '2019-06-01', '2023-03-10'], 'data_variazione_nucleo' => '2023-03-10'],
             $componenti->reali(' rssmra80a01h501u ')
         );
         $this->assertNull($componenti->reali('XXXXXX00X00X000X'));
@@ -82,13 +82,10 @@ class ComponentiFamiliariTest extends TestCase
         $this->assertNull($componenti->reali('RSSMRA40A01H501U'));
     }
 
-    public function test_data_variazione_nucleo_ignora_i_deceduti(): void
+    public function test_data_ingresso_del_componente(): void
     {
-        $data = ComponentiFamiliari::dataVariazioneNucleo(collect([
-            $this->residente(['data_nascita' => '1950-01-01', 'data_immigrazione' => '2010-05-05']),
-            $this->residente(['data_nascita' => '1940-01-01', 'data_variazione_indirizzo' => '2024-01-01', 'data_decesso' => '2024-02-01']),
-        ]));
-
-        $this->assertSame('2010-05-05', $data);
+        $this->assertSame('2010-05-05', ComponentiFamiliari::dataIngresso($this->residente(['data_nascita' => '1950-01-01', 'data_immigrazione' => '2010-05-05'])));
+        $this->assertSame('2023-03-10', ComponentiFamiliari::dataIngresso($this->residente(['data_nascita' => '2023-03-10'])));
+        $this->assertNull(ComponentiFamiliari::dataIngresso($this->residente(['data_nascita' => '1940-01-01', 'data_decesso' => '2024-02-01'])));
     }
 }

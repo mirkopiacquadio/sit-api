@@ -515,11 +515,12 @@
             const righeAnni = Object.keys(dettaglioAnni).sort().map(anno => {
                 const d = dettaglioAnni[anno];
                 if (d.errore) {
-                    return `<tr><td>${anno}</td><td colspan="5" class="text-muted">${d.errore}</td></tr>`;
+                    return `<tr><td>${anno}</td><td colspan="${tipo === 'componenti' ? 6 : 5}" class="text-muted">${d.errore}</td></tr>`;
                 }
                 return `<tr>
                     <td>${anno}</td>
                     <td>${d.giorni ?? 365}</td>
+                    ${tipo === 'componenti' ? `<td>${d.componenti_reali ?? ''}</td>` : ''}
                     <td>${fmtEuro(d.dovuto)}</td>
                     <td>${fmtEuro(d.sanzione)}</td>
                     <td>${fmtEuro(d.interessi)}</td>
@@ -545,10 +546,10 @@
                     <div class="col-md-6">${boxHtml('DOMANI (dati simulati)', 'box-domani', domani)}</div>
                 </div>
                 <p class="${classeDiff} diff-evidenza">${diffLabel}: ${diffValore}</p>
-                <h6 class="mt-3">Recupero per anno (dovuto, sanzioni, interessi)</h6>
+                <h6 class="mt-3">Recupero per anno (dovuto, sanzioni, interessi &mdash; l'anno in corso è solo ruolo)</h6>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered">
-                        <thead><tr><th>Anno</th><th>Giorni</th><th>Dovuto</th><th>Sanzione 30%</th><th>Interessi legali</th><th>Con sanzioni e interessi</th></tr></thead>
+                        <thead><tr><th>Anno</th><th>Giorni</th>${tipo === 'componenti' ? '<th>Componenti reali</th>' : ''}<th>Dovuto</th><th>Sanzione 30%</th><th>Interessi legali</th><th>Con sanzioni e interessi</th></tr></thead>
                         <tbody>${righeAnni}</tbody>
                     </table>
                 </div>

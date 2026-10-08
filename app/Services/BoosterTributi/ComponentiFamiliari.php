@@ -17,10 +17,10 @@ use Illuminate\Support\Facades\DB;
  *   reali di Sant'Agata differisce in ~830 utenze).
  * - Reali: CF -> riga del "File 6 - Dati anagrafici residenza" -> n. componenti
  *   del nucleo (col. R) e residenza attuale (col. G).
- * - Data variazione nucleo: la più recente, tra tutti i componenti vivi dello
- *   stesso codice famiglia (col. P), di data immigrazione (F), data variazione
- *   indirizzo (H) e data di nascita (D): il recupero componenti non può partire
- *   prima (istruzioni cliente 2026-10-07, punto 4).
+ * - Date di ingresso: per ogni componente vivo dello stesso codice famiglia
+ *   (col. P) la più recente tra data immigrazione (F), variazione indirizzo (H) e
+ *   nascita (D); RecuperoCalculator::calcolaComponenti le usa per sapere quanti
+ *   componenti c'erano davvero giorno per giorno (istruzioni cliente 2026-10-08).
  */
 class ComponentiFamiliari
 {
@@ -72,7 +72,7 @@ class ComponentiFamiliari
     }
 
     /**
-     * @return array{n: int, indirizzo: ?string, data_variazione_nucleo: ?string}|null null se il CF non è in anagrafe o manca il n. componenti
+     * @return array{n: int, indirizzo: ?string, date_ingresso: array<int,string>, data_variazione_nucleo: ?string}|null null se il CF non è in anagrafe o manca il n. componenti
      */
     public function reali(?string $codiceFiscale): ?array
     {
@@ -92,28 +92,35 @@ class ComponentiFamiliari
             ? $this->perFamiglia->get(trim((string) $residente->codice_famiglia), collect([$residente]))
             : collect([$residente]);
 
+        $dateIngresso = $famiglia
+            ->map(fn ($componente) => self::dataIngresso($componente))
+            ->filter()
+            ->values()
+            ->all();
+
         return [
             'n' => (int) $residente->n_componenti,
             'indirizzo' => $residente->indirizzo_attuale,
-            'data_variazione_nucleo' => self::dataVariazioneNucleo($famiglia),
+            'date_ingresso' => $dateIngresso,
+            'data_variazione_nucleo' => $dateIngresso === [] ? null : max($dateIngresso),
         ];
     }
 
     /**
-     * @param  Collection<int,object>  $componenti
+     * Da quando il componente vive nel nucleo attuale: la più recente tra data
+     * immigrazione (F), data variazione indirizzo (H) e data di nascita (D).
+     * null per i deceduti (non sono tra i componenti attuali) o senza date.
      */
-    public static function dataVariazioneNucleo(Collection $componenti): ?string
+    public static function dataIngresso(object $componente): ?string
     {
-        $date = [];
-        foreach ($componenti as $componente) {
-            if (! empty($componente->data_decesso)) {
-                continue;
-            }
+        if (! empty($componente->data_decesso)) {
+            return null;
+        }
 
-            foreach (['data_immigrazione', 'data_variazione_indirizzo', 'data_nascita'] as $campo) {
-                if (! empty($componente->{$campo})) {
-                    $date[] = substr((string) $componente->{$campo}, 0, 10);
-                }
+        $date = [];
+        foreach (['data_immigrazione', 'data_variazione_indirizzo', 'data_nascita'] as $campo) {
+            if (! empty($componente->{$campo})) {
+                $date[] = substr((string) $componente->{$campo}, 0, 10);
             }
         }
 

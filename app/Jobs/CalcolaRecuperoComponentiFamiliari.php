@@ -88,19 +88,15 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
 
                 $matchResidenza = AddressNormalizer::corrispondono($immobile->indirizzo_immobile, $reali['indirizzo']);
 
-                // Il recupero parte dalla più recente tra inizio validità della
-                // scheda TARI e ultima variazione del nucleo anagrafico.
                 $dataInizioValidita = $dettaglio->data_inizio_validita ?? $immobile->data_inizio_validita;
-                $dataInizioRecupero = collect([$dataInizioValidita, $reali['data_variazione_nucleo']])
-                    ->filter()
-                    ->map(fn ($d) => substr((string) $d, 0, 10))
-                    ->max();
 
                 $esito = $calcolatore->calcolaComponenti(
                     $dettaglio->codice_tariffa ?? null,
+                    $componentiDichiarati,
                     $reali['n'],
-                    $dataInizioRecupero,
-                    $dettaglio ? [$dettaglio->riduzione_1, $dettaglio->riduzione_2, $dettaglio->riduzione_3] : []
+                    $reali['date_ingresso'],
+                    $dataInizioValidita,
+                    [$dettaglio->riduzione_1, $dettaglio->riduzione_2, $dettaglio->riduzione_3]
                 );
 
                 $risultati[] = [
@@ -111,7 +107,7 @@ class CalcolaRecuperoComponentiFamiliari implements ShouldQueue
                     'match_residenza_ubicazione' => $matchResidenza,
                     'data_inizio_validita' => $dataInizioValidita,
                     'data_variazione_nucleo' => $reali['data_variazione_nucleo'],
-                    'data_inizio_recupero' => $dataInizioRecupero,
+                    'data_inizio_recupero' => $esito['data_inizio_recupero'],
                     'dettaglio_anni' => json_encode($esito['dettaglio_anni']),
                     'totale_recuperabile' => $esito['totale_recuperabile'],
                     'totale_con_sanzioni_interessi' => $esito['totale_con_sanzioni_interessi'],

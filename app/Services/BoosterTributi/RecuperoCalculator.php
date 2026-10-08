@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  * max 5 anni), vedi calcolaPerAnno():
  *   dovuto_anno = differenza * tariffa(anno, quota) * (1 - riduzione%), in pro-rata
  *                 giornaliero nell'anno di inizio validità
- *   totale_anno = dovuto_anno + sanzione 30% + interessi legali cumulati
+ *   totale_anno = dovuto_anno + sanzione 30% + interessi legali cumulati (solo
+ *                 anni chiusi; l'anno in corso è solo ruolo)
  *
  * Le tre dipendenze sono iniettate come closure (non DB::query dirette) così che
  * la logica di calcolo sia testabile con fixture in memoria (vedi
@@ -105,7 +106,7 @@ class RecuperoCalculator
         string $tipoQuota,
         array $riduzioniApplicate = []
     ): array {
-        return $this->calcolaPerAnno($dataInizioValidita, function (int $anno) use ($differenza, $codiceTariffa, $tipoQuota, $riduzioniApplicate): ?array {
+        return $this->calcolaPerAnno($dataInizioValidita, function (int $anno, string $dal, int $giorni, int $divisore) use ($differenza, $codiceTariffa, $tipoQuota, $riduzioniApplicate): ?array {
             $tariffa = $codiceTariffa ? $this->tariffaAnno($anno, $codiceTariffa, $tipoQuota) : null;
             if ($tariffa === null) {
                 return null;
@@ -113,80 +114,113 @@ class RecuperoCalculator
 
             $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniApplicate, $tipoQuota);
 
-            return [$differenza * $tariffa * (1 - $riduzionePerc), $riduzionePerc];
+            return [$differenza * $tariffa * (1 - $riduzionePerc) * $giorni / $divisore, $riduzionePerc, []];
         });
     }
 
     /**
-     * Variante di calcola() per le "DIFFERENZE COMPONENTI FAMILIARI": la tariffa
-     * variabile NON è lineare per componente (File 3 è una tabella a scaglioni,
-     * es. 1 componente 156€, 2 componenti 308€, 3 componenti 398€...), quindi il
-     * dovuto di un anno è la DIFFERENZA tra lo scaglione reale e quello dichiarato,
-     * non "numero componenti in più × tariffa di un singolo scaglione".
+     * Variante di calcola() per le "DIFFERENZE COMPONENTI FAMILIARI".
      *
-     * La riduzione "Unico occupante" applicata nel dichiarato (1 componente) non è
-     * più applicabile quando i componenti reali sono >1: viene esclusa dal ricalcolo
-     * per nome (case-insensitive), le altre riduzioni dichiarate (es. Compostaggio)
-     * restano valide. Vedi ISTRUZIONI Monter e annotazioni cliente 2026-09-27.
+     * - La tariffa variabile NON è lineare per componente (File 3 è una tabella a
+     *   scaglioni, es. 1 componente 156€, 2 componenti 308€, 3 componenti 398€...):
+     *   il dovuto è la DIFFERENZA tra lo scaglione reale e quello dichiarato.
+     * - I componenti reali sono verificati giorno per giorno (istruzioni cliente
+     *   2026-10-08): ogni componente conta solo dalla sua data di ingresso nel
+     *   nucleo, quindi il periodo viene spezzato nei tratti in cui il numero
+     *   cambia (es. +1 dal 2018 e +1 dal 2024: dal 2018 si recupera lo scaglione
+     *   +1, dal 2024 lo scaglione +2). Uscite/decessi passati non sono noti dal
+     *   File 6: i componenti attuali senza data di ingresso contano sempre.
+     * - La riduzione "Unico occupante" non è più applicabile quando i componenti
+     *   reali sono >1: esclusa per nome (case-insensitive), le altre riduzioni
+     *   dichiarate (es. Compostaggio) restano valide.
      *
+     * @param  array<int,string>  $dateIngresso  data di ingresso (Y-m-d) di ciascun componente attuale che ne ha una
      * @param  array<int,string|null>  $riduzioniApplicate  descrizioni riduzione dichiarate (File 2)
-     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, totale_con_sanzioni_interessi: float, anni_mancanti: array<int>}
+     * @return array{dettaglio_anni: array<int, array<string, mixed>>, totale_recuperabile: float, totale_con_sanzioni_interessi: float, anni_mancanti: array<int>, data_inizio_recupero: ?string}
      */
     public function calcolaComponenti(
         ?string $codiceTariffaDichiarato,
+        int $componentiDichiarati,
         int $componentiReali,
+        array $dateIngresso,
         ?string $dataInizioValidita,
         array $riduzioniApplicate = []
     ): array {
         $categoria = $codiceTariffaDichiarato !== null ? explode('.', $codiceTariffaDichiarato, 2)[0] : null;
-        $riduzioniRicalcolo = $this->escludiUnicoOccupante($riduzioniApplicate, $componentiReali);
+        $dateIngresso = array_values(array_filter(array_map(fn ($d) => $d ? substr((string) $d, 0, 10) : null, $dateIngresso)));
+        $dataInizioRecupero = null;
 
-        return $this->calcolaPerAnno($dataInizioValidita, function (int $anno) use ($codiceTariffaDichiarato, $categoria, $componentiReali, $riduzioniRicalcolo): ?array {
+        // Componenti presenti nel giorno $giorno: quelli attuali meno chi è entrato dopo.
+        $presentiIl = function (string $giorno) use ($componentiReali, $dateIngresso): int {
+            $entratiDopo = count(array_filter($dateIngresso, fn ($d) => $d > $giorno));
+
+            return max($componentiReali - $entratiDopo, 1);
+        };
+
+        $esito = $this->calcolaPerAnno($dataInizioValidita, function (int $anno, string $dal, int $giorni, int $divisore) use ($codiceTariffaDichiarato, $categoria, $componentiDichiarati, $riduzioniApplicate, $dateIngresso, $presentiIl, &$dataInizioRecupero): ?array {
             $tariffaDichiarata = $codiceTariffaDichiarato ? $this->tariffaAnno($anno, $codiceTariffaDichiarato, 'variabile') : null;
-            $tariffaReale = $categoria !== null ? $this->tariffaScaglioneComponenti($anno, $categoria, $componentiReali) : null;
-            if ($tariffaDichiarata === null || $tariffaReale === null) {
+            if ($tariffaDichiarata === null || $categoria === null) {
                 return null;
             }
 
-            $riduzionePerc = $this->riduzionePercentuale($anno, $riduzioniRicalcolo, 'variabile');
+            // Tratti [inizio, fine) del periodo separati dalle date di ingresso.
+            $fineAnno = sprintf('%04d-12-31', $anno);
+            $tagli = array_filter($dateIngresso, fn ($d) => $d > $dal && $d <= $fineAnno);
+            $tagli = array_values(array_unique(array_merge([$dal], $tagli)));
+            sort($tagli);
 
-            return [($tariffaReale - $tariffaDichiarata) * (1 - $riduzionePerc), $riduzionePerc];
+            $dovuto = 0.0;
+            $riduzionePerc = 0.0;
+            foreach ($tagli as $i => $inizioTratto) {
+                $fineTratto = $tagli[$i + 1] ?? date('Y-m-d', strtotime($fineAnno.' +1 day'));
+                $giorniTratto = (int) round((strtotime($fineTratto) - strtotime($inizioTratto)) / 86400);
+                $presenti = $presentiIl($inizioTratto);
+
+                if ($presenti <= $componentiDichiarati) {
+                    continue;
+                }
+
+                $tariffaReale = $this->tariffaScaglioneComponenti($anno, $categoria, $presenti);
+                if ($tariffaReale === null) {
+                    return null;
+                }
+
+                $riduzionePerc = $this->riduzionePercentuale($anno, $this->escludiUnicoOccupante($riduzioniApplicate, $presenti), 'variabile');
+                $dovuto += ($tariffaReale - $tariffaDichiarata) * (1 - $riduzionePerc) * $giorniTratto / $divisore;
+                $dataInizioRecupero ??= $inizioTratto;
+            }
+
+            return [$dovuto, $riduzionePerc, ['componenti_reali' => $presentiIl($fineAnno)]];
         });
+
+        return $esito + ['data_inizio_recupero' => $dataInizioRecupero];
     }
 
     /**
-     * Ciclo comune ai due calcoli (annotazioni cliente 2026-10-05, punti 1/2/6).
+     * Ciclo comune ai due calcoli (annotazioni cliente 2026-10-05 e 2026-10-08).
      *
-     * Per ogni anno recuperabile (da anno(data_inizio_validita) all'anno corrente,
-     * max 5 anni indietro):
-     *   dovuto  = dovuto annuo pieno * giorni coperti / 365 (pro-rata solo
-     *             nell'anno di inizio validità: dal 01/12 -> 31/365)
-     *   sanzione  = 30% del dovuto
-     *   interessi = dovuto * somma tassi legali dall'anno dovuto all'anno corrente
-     *               INCLUSO (es. 2022 -> 2022+2023+2024+2025+2026 = 12,35%), con il
-     *               tasso dell'anno di inizio validità anch'esso in pro-rata
-     *   totale    = dovuto + sanzione + interessi
-     * Sanzioni e interessi si applicano anche all'anno corrente: il cliente vuole
-     * per ogni annualità la colonna "con sanzioni e interessi" accanto al dovuto.
+     * Anni recuperabili: gli ultimi 5 più quello in corso (nel 2026: 2021-2026;
+     * dal 2027 la finestra scorre da sola a 2022-2027), a partire dall'anno di
+     * inizio validità della scheda TARI.
+     *   dovuto    = dovuto annuo in pro-rata giornaliero: nel primo anno contano
+     *               solo i giorni dalla data di inizio (dal 01/12 -> 31/365)
+     *   anni chiusi:
+     *     sanzione  = 30% del dovuto
+     *     interessi = dovuto * somma tassi legali dall'anno dovuto all'anno corrente
+     *                 INCLUSO (es. 2022 -> 2022+2023+2024+2025+2026 = 12,35%), con
+     *                 il tasso dell'anno di inizio validità anch'esso in pro-rata
+     *   anno in corso: solo ruolo, niente sanzioni né interessi (il comune può
+     *                  applicarli solo dall'anno successivo)
      *
-     * @param  \Closure(int):?array{0: float, 1: float}  $dovutoAnnuo  anno -> [dovuto annuo pieno, riduzione applicata] o null se manca il tariffario
+     * @param  \Closure(int,string,int,int):?array{0: float, 1: float, 2: array<string,mixed>}  $dovutoPeriodo
+     *                                                                                                          ($anno, $dal Y-m-d, $giorni coperti, $divisore giorni) -> [dovuto del periodo, riduzione applicata, dati extra] o null se manca il tariffario
      */
-    private function calcolaPerAnno(?string $dataInizioValidita, \Closure $dovutoAnnuo): array
+    private function calcolaPerAnno(?string $dataInizioValidita, \Closure $dovutoPeriodo): array
     {
         $annoCorrente = $this->annoCorrente ?? (int) now()->format('Y');
         $inizio = $dataInizioValidita ? strtotime($dataInizioValidita) : false;
         $annoInizio = $inizio !== false ? (int) date('Y', $inizio) : $annoCorrente;
         $primoAnno = max($annoInizio, $annoCorrente - self::MAX_ANNI_ACCERTAMENTO);
-
-        // Frazione d'anno coperta nell'anno di inizio validità: giorni dal giorno di
-        // inizio al 31/12 inclusi, diviso 365 (come richiesto dal cliente, max 1
-        // negli anni bisestili). Se l'inizio è prima della finestra, anno pieno.
-        $quotaPrimoAnno = 1.0;
-        $giorniPrimoAnno = 365;
-        if ($inizio !== false && $annoInizio === $primoAnno) {
-            $giorniPrimoAnno = (int) date('z', mktime(0, 0, 0, 12, 31, $annoInizio)) - (int) date('z', $inizio) + 1;
-            $quotaPrimoAnno = min($giorniPrimoAnno / self::GIORNI_ANNO, 1.0);
-        }
 
         $dettaglioAnni = [];
         $anniMancanti = [];
@@ -194,31 +228,44 @@ class RecuperoCalculator
         $totaleConSanzioni = 0.0;
 
         for ($anno = $primoAnno; $anno <= $annoCorrente; $anno++) {
-            $annuo = $dovutoAnnuo($anno);
+            // Periodo coperto: dal giorno di inizio validità (solo nel suo anno) al
+            // 31/12. Divisore 365 come richiesto dal cliente, ma mai sotto i giorni
+            // dell'anno (un bisestile intero vale 1, non 366/365).
+            $dal = ($inizio !== false && $anno === $annoInizio) ? date('Y-m-d', $inizio) : sprintf('%04d-01-01', $anno);
+            $giorni = (int) date('z', mktime(0, 0, 0, 12, 31, $anno)) - (int) date('z', strtotime($dal)) + 1;
+            $divisore = max(self::GIORNI_ANNO, $giorni);
+            $quota = $giorni / $divisore;
 
-            if ($annuo === null) {
+            $periodo = $dovutoPeriodo($anno, $dal, $giorni, $divisore);
+
+            if ($periodo === null) {
                 $anniMancanti[] = $anno;
                 $dettaglioAnni[$anno] = ['errore' => 'tariffario mancante'];
 
                 continue;
             }
 
-            [$dovutoPieno, $riduzionePerc] = $annuo;
-            $quota = $anno === $primoAnno ? $quotaPrimoAnno : 1.0;
-            $dovutoAnno = round($dovutoPieno * $quota, 2);
+            [$dovuto, $riduzionePerc, $extra] = $periodo;
+            $dovutoAnno = round($dovuto, 2);
 
-            $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
-            $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente, $quota), 2);
+            if ($anno === $annoCorrente) {
+                $sanzione = 0.0;
+                $interessi = 0.0;
+            } else {
+                $sanzione = round($dovutoAnno * self::SANZIONE_PERCENTUALE, 2);
+                $interessi = round($dovutoAnno * $this->interessiCumulati($anno, $annoCorrente, $quota), 2);
+            }
             $totaleAnno = round($dovutoAnno + $sanzione + $interessi, 2);
 
             $dettaglioAnni[$anno] = [
-                'giorni' => $anno === $primoAnno ? min($giorniPrimoAnno, self::GIORNI_ANNO) : self::GIORNI_ANNO,
+                'giorni' => min($giorni, self::GIORNI_ANNO),
                 'dovuto' => $dovutoAnno,
                 'sanzione' => $sanzione,
                 'interessi' => $interessi,
                 'riduzione_applicata' => $riduzionePerc,
                 'totale' => $totaleAnno,
-            ];
+                'tipo' => $anno === $annoCorrente ? 'ruolo' : 'accertamento',
+            ] + $extra;
 
             $totale += $dovutoAnno;
             $totaleConSanzioni += $totaleAnno;

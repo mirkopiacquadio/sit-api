@@ -36,16 +36,19 @@ class RecuperoCalculatorTest extends TestCase
         );
     }
 
-    public function test_anno_corrente_ha_sanzione_e_interessi_dell_anno_stesso(): void
+    /**
+     * Annotazioni cliente 2026-10-08: l'anno in corso è solo ruolo, sanzioni e
+     * interessi si applicano dall'anno successivo.
+     */
+    public function test_anno_corrente_solo_ruolo_senza_sanzioni_ne_interessi(): void
     {
         $calc = $this->calcolatore(tariffe: [2026 => ['1.1' => ['fissa' => 10.0]]], annoCorrente: 2026);
 
         $esito = $calc->calcola(10.0, '1.1', '2026-01-01', 'fissa');
 
-        // dovuto 100, sanzione 30, interessi 2026 1,6% = 1,6
-        $this->assertSame(['giorni' => 365, 'dovuto' => 100.0, 'sanzione' => 30.0, 'interessi' => 1.6, 'riduzione_applicata' => 0.0, 'totale' => 131.6], $esito['dettaglio_anni'][2026]);
+        $this->assertSame(['giorni' => 365, 'dovuto' => 100.0, 'sanzione' => 0.0, 'interessi' => 0.0, 'riduzione_applicata' => 0.0, 'totale' => 100.0, 'tipo' => 'ruolo'], $esito['dettaglio_anni'][2026]);
         $this->assertSame(100.0, $esito['totale_recuperabile']);
-        $this->assertSame(131.6, $esito['totale_con_sanzioni_interessi']);
+        $this->assertSame(100.0, $esito['totale_con_sanzioni_interessi']);
     }
 
     /**
@@ -66,30 +69,30 @@ class RecuperoCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(142.35, $esito['dettaglio_anni'][2022]['totale'], 0.001);
         // 2023: 30% + 5+2,5+2+1,6 = 41,1%
         $this->assertEqualsWithDelta(141.10, $esito['dettaglio_anni'][2023]['totale'], 0.001);
-        // 2026: 30% + 1,6%
-        $this->assertEqualsWithDelta(131.60, $esito['dettaglio_anni'][2026]['totale'], 0.001);
+        // 2026 (anno in corso): solo ruolo
+        $this->assertEqualsWithDelta(100.0, $esito['dettaglio_anni'][2026]['totale'], 0.001);
 
         $this->assertEqualsWithDelta(500.0, $esito['totale_recuperabile'], 0.001);
-        $this->assertEqualsWithDelta(142.35 + 141.10 + 136.10 + 133.60 + 131.60, $esito['totale_con_sanzioni_interessi'], 0.001);
+        $this->assertEqualsWithDelta(142.35 + 141.10 + 136.10 + 133.60 + 100.0, $esito['totale_con_sanzioni_interessi'], 0.001);
         $this->assertSame([], $esito['anni_mancanti']);
     }
 
     /**
-     * Annotazioni 2026-10-05, punto 1: inizio validità 01/12/2026 -> per il 2026
+     * Annotazioni 2026-10-05, punto 1: inizio validità 01/12 -> per quell'anno
      * conta solo 31 giorni su 365, anche per sanzione e interessi.
      */
     public function test_pro_rata_giornaliero_nell_anno_di_inizio_validita(): void
     {
-        $calc = $this->calcolatore(tariffe: [2026 => ['1.1' => ['fissa' => 365.0]]], annoCorrente: 2026);
+        $calc = $this->calcolatore(tariffe: [2025 => ['1.1' => ['fissa' => 365.0]], 2026 => ['1.1' => ['fissa' => 365.0]]], annoCorrente: 2026);
 
-        $esito = $calc->calcola(1.0, '1.1', '2026-12-01', 'fissa');
+        $esito = $calc->calcola(1.0, '1.1', '2025-12-01', 'fissa');
 
-        $anno = $esito['dettaglio_anni'][2026];
+        $anno = $esito['dettaglio_anni'][2025];
         $this->assertSame(31, $anno['giorni']);
         $this->assertEqualsWithDelta(31.0, $anno['dovuto'], 0.001);
         $this->assertEqualsWithDelta(9.3, $anno['sanzione'], 0.001);
-        // interessi 1,6% * 31/365 sul dovuto già proporzionato: 31 * 0.016 * 31/365 = 0,042 -> 0,04
-        $this->assertEqualsWithDelta(0.04, $anno['interessi'], 0.001);
+        // interessi (2% * 31/365 + 1,6%) sul dovuto già proporzionato: 31 * 0,0176986 = 0,55
+        $this->assertEqualsWithDelta(0.55, $anno['interessi'], 0.001);
     }
 
     public function test_pro_rata_solo_sul_primo_anno_e_interessi_del_primo_anno_proporzionati(): void
@@ -199,7 +202,7 @@ class RecuperoCalculatorTest extends TestCase
         ]];
         $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
 
-        $esito = $calc->calcolaComponenti('1.1', 3, '2026-01-01');
+        $esito = $calc->calcolaComponenti('1.1', 1, 3, [], '2026-01-01');
 
         // arrotondato a 2 decimali (valuta), come tutti gli altri importi della classe.
         $this->assertEqualsWithDelta(241.96, $esito['totale_recuperabile'], 0.001);
@@ -217,7 +220,7 @@ class RecuperoCalculatorTest extends TestCase
         ];
         $calc = $this->calcolatore($tariffe, $riduzioni, annoCorrente: 2026);
 
-        $esito = $calc->calcolaComponenti('1.1', 3, '2026-01-01', ['Unico occupante', 'Compostaggio']);
+        $esito = $calc->calcolaComponenti('1.1', 1, 3, [], '2026-01-01', ['Unico occupante', 'Compostaggio']);
 
         // dovuto = (300 - 100) * (1 - 0.30) = 140: "Unico occupante" esclusa, "Compostaggio" resta applicata.
         $this->assertEqualsWithDelta(140.0, $esito['totale_recuperabile'], 0.001);
@@ -232,7 +235,7 @@ class RecuperoCalculatorTest extends TestCase
         ]];
         $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
 
-        $esito = $calc->calcolaComponenti('1.1', 8, '2026-01-01');
+        $esito = $calc->calcolaComponenti('1.1', 1, 8, [], '2026-01-01');
 
         $this->assertEqualsWithDelta(400.0, $esito['totale_recuperabile'], 0.001);
     }
@@ -241,9 +244,50 @@ class RecuperoCalculatorTest extends TestCase
     {
         $calc = $this->calcolatore(tariffe: [], annoCorrente: 2026);
 
-        $esito = $calc->calcolaComponenti(null, 3, '2026-01-01');
+        $esito = $calc->calcolaComponenti(null, 1, 3, [], '2026-01-01');
 
         $this->assertSame(0.0, $esito['totale_recuperabile']);
         $this->assertSame([2026], $esito['anni_mancanti']);
+    }
+
+    /**
+     * Esempio del cliente (2026-10-08): dichiarato 1, un componente entrato il
+     * 01/01/2024 e uno il 01/07/2025 -> 2024 a 2 componenti, 2025 metà anno a 2
+     * e metà a 3, 2026 a 3. Prima dell'ingresso nessun recupero.
+     */
+    public function test_calcola_componenti_verifica_giorno_per_giorno_quanti_componenti_c_erano(): void
+    {
+        $tariffe = [];
+        foreach ([2023, 2024, 2025, 2026] as $anno) {
+            $tariffe[$anno]['1.1']['variabile'] = 100.0;
+            $tariffe[$anno]['1.2']['variabile'] = 465.0;
+            $tariffe[$anno]['1.3']['variabile'] = 830.0;
+        }
+        $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
+
+        $esito = $calc->calcolaComponenti('1.1', 1, 3, ['1980-05-05', '2024-01-01', '2025-07-01'], '2023-01-01');
+
+        $this->assertSame(0.0, $esito['dettaglio_anni'][2023]['dovuto']);
+        $this->assertSame(1, $esito['dettaglio_anni'][2023]['componenti_reali']);
+        // 2024: (465-100) per tutto l'anno
+        $this->assertEqualsWithDelta(365.0, $esito['dettaglio_anni'][2024]['dovuto'], 0.001);
+        // 2025: 181 giorni a 2 componenti (365 * 181/365) + 184 giorni a 3 (730 * 184/365)
+        $this->assertEqualsWithDelta(181 + 730 * 184 / 365, $esito['dettaglio_anni'][2025]['dovuto'], 0.01);
+        $this->assertSame(3, $esito['dettaglio_anni'][2025]['componenti_reali']);
+        $this->assertEqualsWithDelta(730.0, $esito['dettaglio_anni'][2026]['dovuto'], 0.001);
+        $this->assertSame('2024-01-01', $esito['data_inizio_recupero']);
+    }
+
+    public function test_calcola_componenti_parte_comunque_dall_inizio_validita_tari(): void
+    {
+        $tariffe = [2025 => ['1.1' => ['variabile' => 100.0], '1.2' => ['variabile' => 465.0]], 2026 => ['1.1' => ['variabile' => 100.0], '1.2' => ['variabile' => 465.0]]];
+        $calc = $this->calcolatore($tariffe, annoCorrente: 2026);
+
+        // componente presente dal 2010, ma la scheda TARI vale dal 01/12/2025
+        $esito = $calc->calcolaComponenti('1.1', 1, 2, ['2010-01-01'], '2025-12-01');
+
+        $this->assertSame([2025, 2026], array_keys($esito['dettaglio_anni']));
+        $this->assertEqualsWithDelta(31.0, $esito['dettaglio_anni'][2025]['dovuto'], 0.001);
+        $this->assertSame('2025-12-01', $esito['data_inizio_recupero']);
     }
 }
